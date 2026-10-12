@@ -481,9 +481,26 @@ body { margin: 0; }
 .logo-g span { color: var(--muted); font-size: 13px; }
 .gate-form { display: grid; gap: 14px; }
 .gate-form .btn, .gate-card > .btn { justify-content: center; padding: 11px; }
-.acc-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 120px auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; }
-.acc-row:first-of-type { border-top: 0; }
-@media (max-width: 700px) { .acc-row { grid-template-columns: minmax(0, 1fr) auto; } .acc-row > span:nth-child(2), .acc-row > span:nth-child(3) { display: none; } }
+.acc-sum { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: -4px 0 4px; font-size: 13px; color: var(--muted); }
+.acc-sum b { color: var(--ink); }
+.acc { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.acc-list > .acc:first-child { border-top: 0; }
+.acc-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.acc-acts { display: flex; gap: 14px; flex: none; }
+.acc-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding-left: 36px; font-size: 13px; color: var(--muted); }
+.acc-meta b { color: var(--ink); }
+.rol { display: inline-flex; align-items: center; border-radius: 6px; padding: 2px 8px; font-size: 12.5px; font-weight: 600; }
+.rol-admin { background: var(--accent-soft); color: var(--accent); }
+.rol-membru { background: var(--ok-soft); color: var(--ok); }
+.rol-citire { background: var(--dead-soft); color: var(--dead); }
+.acc-new { color: var(--warn); font-weight: 600; }
+.link.danger { color: var(--bad); }
+.acc-fara { display: grid; gap: 8px; margin: 6px 0 4px; padding: 12px 14px; border-radius: 10px; background: var(--warn-soft); font-size: 13.5px; }
+.acc-fara .mono { overflow: hidden; text-overflow: ellipsis; }
+.acc-legend { display: grid; gap: 4px; margin: 14px 0 0; font-size: 13px; color: var(--muted); }
+.acc-legend b { color: var(--ink); font-weight: 600; }
+.inp[readonly] { background: var(--surface-2); color: var(--muted); }
+@media (max-width: 520px) { .acc-meta { padding-left: 0; } }
 </style>
 </head>
 <body>
@@ -731,7 +748,10 @@ const LOAD = {
   async observatii() { D.obs = (await fetchAll('observatii', '*', 'data')).map(x => ({ id: x.id, cid: x.client_id, autor: x.autor, data: x.data, tip: x.tip, text: x.text })); },
   async contacte() { D.cont = (await fetchAll('contacte', '*', 'data')).map(x => ({ id: x.id, cid: x.client_id, autor: x.autor, data: x.data, nume: x.nume, rol: x.rol, tel: x.tel, email: x.email })); },
   async echipa() { D.echipa = (await fetchAll('echipa', '*', 'ordine')).map(x => ({ k: x.k, n: x.n })); },
-  async membri() { D.membri = await fetchAll('membri', 'user_id,email,nume,rol,echipa_k', 'nume'); D.names = Object.fromEntries(D.membri.map(x => [x.user_id, x.nume])); },
+  async membri() {
+    D.membri = await fetchAll('membri', 'user_id,email,nume,rol,echipa_k', 'nume'); D.names = Object.fromEntries(D.membri.map(x => [x.user_id, x.nume]));
+    if (D.canAdmin) { const r = await sb.rpc('admin_conturi'); D.conturi = r.error ? null : r.data || []; }   // fără funcție în bază → pagina arată doar rolurile
+  },
 };
 const reloadT = {};
 function reload(t) {
@@ -853,21 +873,46 @@ async function start(user) {
 
 /* ---------- pagina Echipă: conturi și import (doar admin) ---------- */
 const ROL_N = { admin: 'Admin', membru: 'Membru', citire: 'Doar citire' };
+const ROL_CAN = { admin: 'lucrează pe fișe, dă acces, încarcă fișe și exportă Excel',
+  membru: 'lucrează pe fișe: etape, pași, note, contacte, alocări', citire: 'vede tot, fără să modifice' };
+const ROL_ORD = { admin: 0, membru: 1, citire: 2 };
+const cate = (n, sg, pl, bold) => { const x = bold ? `<b>${n}</b>` : n; return n === 1 ? `${x} ${sg}` : n % 100 >= 20 || (n && n % 100 === 0) ? `${x} de ${pl}` : `${x} ${pl}`; };
+const when = iso => {
+  const d = new Date(iso); if (!iso || isNaN(d)) return '';
+  const zi = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const z = Math.round((zi(new Date()) - zi(d)) / 864e5), hm = d.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  return z <= 0 ? `azi, ${hm}` : z === 1 ? `ieri, ${hm}` : z < 30 ? `acum ${z} zile` : fmtDate(iso);
+};
+function accRow(m, info) {
+  const self = m.user_id === ME.id;
+  const n = m.echipa_k ? C.filter(r => r.status === 'tinta' && respOf(r) === m.echipa_k).length : 0;
+  const intrare = !D.conturi ? '' : info && info.ultima_intrare ? `Ultima intrare: ${when(info.ultima_intrare)}` : '<span class="acc-new">N-a intrat încă</span>';
+  return `<div class="acc">
+    <div class="acc-top"><span class="who">${avatar(m.echipa_k || m.user_id, m.nume)}<span>${esc(m.nume)}${self ? ' <span class="faint">(tu)</span>' : ''}<br><small class="faint">${esc(m.email)}</small></span></span>
+      <span class="acc-acts"><button class="link" data-editacc="${esc(m.user_id)}">modifică</button>${self ? '' : `<button class="link danger" data-rmacc="${esc(m.user_id)}">scoate accesul</button>`}</span></div>
+    <div class="acc-meta"><span class="rol rol-${esc(m.rol)}">${esc(ROL_N[m.rol] || m.rol)}</span><span>${esc(ROL_CAN[m.rol] || '')}</span></div>
+    <div class="acc-meta"><span>${m.echipa_k ? `Lista ${esc(teamName(m.echipa_k))} · ${cate(n, 'client', 'clienți', true)}` : 'Fără listă de clienți'}</span>
+      ${intrare ? `<span>${intrare}</span>` : ''}${info && info.creat ? `<span class="faint">cont creat ${fmtDate(info.creat)}</span>` : ''}</div></div>`;
+}
 function viewEchipa() {
   if (!D.canAdmin) return viewEchipaBase();
-  const tm = team();
+  const tm = team(), M = (D.membri || []).slice().sort((a, b) => (ROL_ORD[a.rol] ?? 9) - (ROL_ORD[b.rol] ?? 9) || a.nume.localeCompare(b.nume, 'ro'));
+  const info = Object.fromEntries((D.conturi || []).map(x => [x.user_id, x]));
+  const nr = r => M.filter(m => m.rol === r).length, neintrati = D.conturi ? M.filter(m => !(info[m.user_id] || {}).ultima_intrare).length : 0;
+  const fara = (D.conturi || []).filter(x => !x.are_acces);
   return viewEchipaBase() + `<section class="grid g2">
     <div class="card"><header><h3>${ico('person')}Conturi cu acces</h3></header>
-      ${(D.membri || []).map(m => `<div class="acc-row"><span class="who">${avatar(m.echipa_k || m.user_id, m.nume)}<span>${esc(m.nume)}<br><small class="faint">${esc(m.email)}</small></span></span>
-        <span>${esc(ROL_N[m.rol] || m.rol)}</span><span class="muted">${m.echipa_k ? esc(teamName(m.echipa_k)) : '—'}</span>
-        ${m.user_id !== ME.id ? `<button class="link" data-rmacc="${esc(m.user_id)}">scoate accesul</button>` : '<span class="faint">tu</span>'}</div>`).join('')}
+      <p class="acc-sum"><span>${cate(M.length, 'cont', 'conturi', true)}</span><span>${cate(nr('admin'), 'admin', 'admini')}</span><span>${cate(nr('membru'), 'membru', 'membri')}</span>${nr('citire') ? `<span>${nr('citire')} doar citire</span>` : ''}${neintrati ? `<span class="acc-new">${neintrati === 1 ? 'unul n-a intrat încă' : neintrati + ' n-au intrat încă'}</span>` : ''}</p>
+      <div class="acc-list">${M.map(m => accRow(m, info[m.user_id])).join('')}</div>
+      ${fara.length ? `<div class="acc-fara"><b>Create în Supabase, fără acces în CRM</b>${fara.map(x => `<div class="acc-top"><span class="mono">${esc(x.email)}</span><button class="link" data-grantacc="${esc(x.email)}">dă acces</button></div>`).join('')}</div>` : ''}
       <form id="accform" class="cform">
         <label class="field">E-mailul contului<input class="inp" id="ac-email" type="email" placeholder="nume@firma.ro" spellcheck="false"></label>
         <label class="field">Nume afișat<input class="inp" id="ac-nume" placeholder="Ex.: Ioan"></label>
         <label class="field">Rol<select class="inp" id="ac-rol"><option value="membru">Membru: lucrează în CRM</option><option value="citire">Doar citire</option><option value="admin">Admin</option></select></label>
         <label class="field">Lista lui de clienți<select class="inp" id="ac-k"><option value="">— niciuna —</option>${tm.map(x => `<option value="${esc(x.k)}">${esc(x.n)}</option>`).join('')}</select></label>
-        <div class="acts"><button class="btn pri sm">${ico('plus')}Dă acces</button><span class="err" id="ac-err"></span></div></form>
-      <p class="note">Pasul 1: creezi contul în Supabase → Authentication → Users → Add user (e-mail și parolă, cu „Auto Confirm User” bifat). Pasul 2: îi dai acces aici. Fără pasul 2, contul nu vede nimic.</p></div>
+        <div class="acts"><button class="btn pri sm" id="ac-btn">${ico('plus')}Dă acces</button><button type="button" class="link" id="ac-cancel" hidden>renunță</button><span class="err" id="ac-err"></span></div></form>
+      <div class="acc-legend">${['admin', 'membru', 'citire'].map(r => `<span><b>${ROL_N[r]}</b>: ${r === 'citire' ? ROL_CAN[r] : 'vede tot, ' + ROL_CAN[r]}.</span>`).join('')}</div>
+      <p class="note">Cont nou: pasul 1, îl creezi în Supabase → Authentication → Users → Add user (e-mail și parolă, cu „Auto Confirm User” bifat); pasul 2, îi dai acces aici. Fără pasul 2, contul nu vede nimic. Ca să schimbi rolul sau lista cuiva, apasă „modifică”.</p></div>
     <div class="card"><header><h3>${ico('dl')}Fișele de cercetare</h3></header>
       <p class="muted" style="margin:0 0 12px">${C.length ? `${C.length} fișe încărcate, cercetare din ${fmtDate(RAW.generat)}.` : 'Nicio fișă încărcată încă.'} Încarcă fișierul <span class="mono">crm-date-import.json</span> ca să adaugi sau să actualizezi fișele. Etapele, notele, contactele și alocările existente nu se modifică.</p>
       <form id="importform" style="display:grid;gap:10px"><input class="inp" id="imp-file" type="file" accept=".json,application/json" aria-label="Fișierul de import">
@@ -929,10 +974,12 @@ document.addEventListener('submit', async e => {
     const email = $('#ac-email').value.trim(), nume = $('#ac-nume').value.trim(), err = $('#ac-err');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Scrie adresa de e-mail a contului.'; return; }
     if (!nume) { err.textContent = 'Scrie numele afișat.'; return; }
+    if (email.toLowerCase() === (ME.email || '').toLowerCase() && $('#ac-rol').value !== 'admin') { err.textContent = 'Nu-ți poți scoate singur rolul de Admin.'; return; }
     err.textContent = '';
+    const exista = (D.membri || []).some(m => m.email.toLowerCase() === email.toLowerCase());
     const res = await sb.rpc('admin_acces', { p_email: email, p_nume: nume, p_rol: $('#ac-rol').value, p_echipa_k: $('#ac-k').value || null });
     if (res.error) { err.textContent = res.error.message; return; }
-    toast(nume + ' are acum acces la CRM.'); reload('membri'); return;
+    toast(exista ? `Contul lui ${nume} a fost actualizat.` : nume + ' are acum acces la CRM.'); reload('membri'); return;
   }
   if (f.id === 'importform') {
     e.preventDefault();
@@ -940,9 +987,19 @@ document.addEventListener('submit', async e => {
     await runImport(fl);
   }
 });
+function accFill(m) {   // formularul de acces: gol = cont nou; cu un membru = modificare
+  $('#ac-email').value = m ? m.email : ''; $('#ac-email').readOnly = !!m;
+  $('#ac-nume').value = m ? m.nume : ''; $('#ac-rol').value = m ? m.rol : 'membru'; $('#ac-k').value = m && m.echipa_k || '';
+  $('#ac-btn').innerHTML = m ? `${ico('check')}Salvează modificările` : `${ico('plus')}Dă acces`;
+  $('#ac-cancel').hidden = !m; $('#ac-err').textContent = '';
+  if (m) { $('#accform').scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#ac-nume').focus(); }
+}
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-act="logout"], [data-act="reload"], [data-rmacc]');
+  const t = e.target.closest('[data-act="logout"], [data-act="reload"], [data-rmacc], [data-editacc], [data-grantacc], #ac-cancel');
   if (!t) return;
+  if (t.id === 'ac-cancel') { accFill(null); return; }
+  if (t.dataset.editacc) { accFill((D.membri || []).find(m => m.user_id === t.dataset.editacc)); return; }
+  if (t.dataset.grantacc) { accFill(null); $('#ac-email').value = t.dataset.grantacc; $('#ac-nume').focus(); $('#accform').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
   if (t.dataset.act === 'reload') { location.reload(); return; }
   if (t.dataset.act === 'logout') { if (sb) await sb.auth.signOut(); else location.reload(); return; }
   if (t.dataset.rmacc) {
