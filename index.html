@@ -678,6 +678,9 @@ const EMPTY = Object.freeze({});
 const P = r => D.prog[r.id] || EMPTY;
 const etapaOf = r => P(r).etapa || 'neatins';
 const respOf = r => P(r).resp || null;
+// cine modifică o fișă: în versiunea web doar responsabilul ei și adminii (D.mine se setează la login; Matei, 15.10.2026)
+const canEdit = r => !!(r && D.db && D.canWrite && (D.canAdmin || !D.mine || D.mine(r)));
+const NOEDIT = 'Doar responsabilul clientului sau un Admin poate modifica fișa.';
 const isLate = r => { const p = P(r); return !!(p.termen && p.termen < TODAY && !['activ', 'pierdut'].includes(etapaOf(r))); };
 function team() {
   const m = Array.isArray(D.echipa) ? D.echipa.filter(x => x && x.k).map(x => ({ k: x.k, n: x.n })) : [];
@@ -713,6 +716,7 @@ async function write(fn) {
   }
 }
 function setProg(id, patch) {
+  if (!canEdit(BYID.get(id))) { toast(NOEDIT); return Promise.resolve(false); }   // doar responsabilul sau un Admin
   const cur = D.prog[id] || {};
   const body = Object.assign({}, cur, patch, { upd: new Date().toISOString(), by: D.uid || null });
   for (const k of Object.keys(body)) if (body[k] === undefined) delete body[k];
@@ -852,6 +856,7 @@ async function start(user) {
     if (!me) { showGate('noaccess', user.email); return; }
     ME = { id: user.id, email: user.email, nume: me.nume, rol: me.rol, k: me.echipa_k };
     Object.assign(D, { db: DBX, dl: me.rol === 'admin' ? DL : null, uid: user.id, isOwner: me.rol === 'admin', canAdmin: me.rol === 'admin', canWrite: me.rol !== 'citire', mode: 'live' });
+    D.mine = me.rol === 'admin' ? null : (r => !!ME.k && respOf(r) === ME.k);   // membrii modifică doar fișele alocate lor
     const [rows, setari] = await Promise.all([fetchAll('clienti', 'id,data'), sb.from('setari').select('k,v')]);
     prepData(rows.map(x => x.data), ((chk(setari) || []).find(x => x.k === 'generat') || {}).v || null);
     await Promise.all([LOAD.progres(), LOAD.observatii(), LOAD.contacte(), LOAD.echipa(), LOAD.membri()]);
@@ -874,8 +879,8 @@ async function start(user) {
 
 /* ---------- pagina Echipă: conturi și import (doar admin) ---------- */
 const ROL_N = { admin: 'Admin', membru: 'Membru', citire: 'Doar citire' };
-const ROL_CAN = { admin: 'lucrează pe fișe, dă acces, încarcă fișe și exportă Excel',
-  membru: 'lucrează pe fișe: etape, pași, note, contacte, alocări', citire: 'vede tot, fără să modifice' };
+const ROL_CAN = { admin: 'lucrează pe toate fișele, alocă clienți, dă acces, încarcă fișe și exportă Excel',
+  membru: 'lucrează doar pe fișele alocate lui: etape, pași, note, contacte', citire: 'vede tot, fără să modifice' };
 const ROL_ORD = { admin: 0, membru: 1, citire: 2 };
 const cate = (n, sg, pl, bold) => { const x = bold ? `<b>${n}</b>` : n; return n === 1 ? `${x} ${sg}` : n % 100 >= 20 || (n && n % 100 === 0) ? `${x} de ${pl}` : `${x} ${pl}`; };
 const when = iso => {
@@ -1189,7 +1194,7 @@ function viewClienti() {
   const body = shown.map(r => {
     const p = P(r), e = etapaOf(r), rk = respOf(r);
     return `<div class="lrow${S.sel.has(r.id) ? ' sel' : ''}" tabindex="0" data-open="${esc(r.id)}">
-      <div class="c-sel">${cw && r.status === 'tinta' ? `<input type="checkbox" class="rowsel" data-selid="${esc(r.id)}" aria-label="Selectează ${esc(r.nume)}" ${S.sel.has(r.id) ? 'checked' : ''}>` : ''}</div>
+      <div class="c-sel">${canEdit(r) && r.status === 'tinta' ? `<input type="checkbox" class="rowsel" data-selid="${esc(r.id)}" aria-label="Selectează ${esc(r.nume)}" ${S.sel.has(r.id) ? 'checked' : ''}>` : ''}</div>
       <div class="c-name cname"><b>${esc(r.nume)}${r.red_flag ? `<span class="flag f-red">${esc(r.red_flag)}</span>` : ''}</b>
         <small>${esc(r.sector || STATUS_N[r.status])} ${plates(r, 3)}${r.hu ? '<span class="flag f-hu">HU</span>' : ''}</small></div>
       <div class="c-resp"><span class="who">${avatar(rk, teamName(rk))}<span>${rk ? esc(teamName(rk)) : '<span class="faint">Nealocat</span>'}</span></span></div>
@@ -1285,7 +1290,7 @@ function viewPipeline() {
     const [a, b] = sumVol(items);
     const lim = S.showAll['col-' + e.k] ? items.length : 30;
     return `<section class="col" data-drop="${e.k}" style="--c:${colVar(e.k)}"><header><b>${e.n}</b><small class="num">${items.length}${b ? ` · ${fmtInt(a)}–${fmtInt(b)} c/an` : ''}</small></header>
-      <div class="cards">${items.slice(0, lim).map(r => { const p = P(r), rk = respOf(r); return `<article class="kc" data-open="${esc(r.id)}" ${D.canWrite ? `draggable="true" data-drag="${esc(r.id)}"` : ''}>
+      <div class="cards">${items.slice(0, lim).map(r => { const p = P(r), rk = respOf(r); return `<article class="kc" data-open="${esc(r.id)}" ${canEdit(r) ? `draggable="true" data-drag="${esc(r.id)}"` : ''}>
           <b>${esc(r.nume)}${r.red_flag ? ' <span class="flag f-red">!</span>' : ''}</b>
           <div class="r"><span class="who" style="font-size:12.5px">${avatar(rk, teamName(rk))}<span>${rk ? esc(teamName(rk)) : 'Nealocat'}</span></span><span class="num">${volTxt(r)} c/an</span></div>
           ${p.termen || p.pas ? `<div class="r"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.pas || '')}</span>${dateTag(p.termen)}</div>` : ''}</article>`; }).join('')}
@@ -1410,7 +1415,7 @@ function refreshProfile() {
 const updLine = r => { const p = P(r); return p.upd ? `Actualizat ${ago(p.upd)} de ${esc(who(p.by))}` : (D.db ? 'Nicio actualizare încă' : ''); };
 function stageHTML(r) {
   if (r.status !== 'tinta') return `<div id="p-stage"><span class="flag f-gray">${esc(STATUS_N[r.status])}</span></div>`;
-  const e = etapaOf(r), idx = TRASEU.findIndex(x => x.k === e), ro = !(D.db && D.canWrite);
+  const e = etapaOf(r), idx = TRASEU.findIndex(x => x.k === e), ro = !canEdit(r);
   const steps = TRASEU.map((x, i) => {
     const cls = i < idx ? 'done' : x.k === e ? 'cur s-' + x.k : '';
     return (i ? '<span class="stepsep"></span>' : '') + `<button class="step ${cls}" style="${x.k === e ? `color:var(--s-${x.k})` : ''}" data-step="${x.k}" ${ro ? 'disabled' : ''} aria-pressed="${x.k === e}"><span class="dot">${i < idx ? ico('check') : ''}</span>${x.n}</button>`;
@@ -1432,7 +1437,7 @@ function tabsHTML(r) {
     .map(([k, n, c]) => `<button role="tab" data-ptab="${k}" aria-selected="${S.ptab === k}">${n}${c !== '' && c ? `<small>${c}</small>` : ''}</button>`).join('')}</nav>`;
 }
 function nextHTML(r) {
-  const p = P(r), ro = !(D.db && D.canWrite);
+  const p = P(r), ro = !canEdit(r);
   if (r.status !== 'tinta') return '<div id="p-next"></div>';
   return `<div class="card" id="p-next"><header><h3>${ico('cal')}Următorul pas</h3><span class="faint" style="font-size:12.5px" id="p-upd">${updLine(r)}</span></header>
     <form class="nextform" id="nextform" data-id="${esc(r.id)}">
@@ -1444,12 +1449,12 @@ function nextHTML(r) {
 function jurnalItems(r, lim) {
   const l = D.obsBy[r.id] || [];
   if (!D.db) return '<li class="empty-li">Jurnalul apare când pagina e deschisă pe claude.ai.</li>';
-  if (!l.length) return `<li class="empty-li">Nicio notă încă.${D.canWrite ? ' Scrie mai sus ce s-a întâmplat la primul contact.' : ''}</li>`;
+  if (!l.length) return `<li class="empty-li">Nicio notă încă.${canEdit(r) ? ' Scrie mai sus ce s-a întâmplat la primul contact.' : ''}</li>`;
   return l.slice(0, lim).map(o => `<li class="${esc(o.tip)}"><span class="ic">${ico(TIP_IC[o.tip] || 'note')}</span><div><div class="h"><b>${esc(TIP_N[o.tip] || o.tip)}</b><span>${esc(who(o.autor))} · ${fmtDate(o.data)}</span>
-    ${D.canWrite && (o.autor === D.uid || D.isOwner) ? `<button class="link" data-delobs="${esc(o.id)}">șterge</button>` : ''}</div><p>${esc(o.text)}</p></div></li>`).join('');
+    ${canEdit(r) && (o.autor === D.uid || D.isOwner) ? `<button class="link" data-delobs="${esc(o.id)}">șterge</button>` : ''}</div><p>${esc(o.text)}</p></div></li>`).join('');
 }
 function composerHTML(r) {
-  if (!(D.db && D.canWrite)) return '';
+  if (!canEdit(r)) return D.db && D.canWrite ? `<p class="note" style="margin:0 0 12px">${NOEDIT}</p>` : '';
   return `<form class="composer" id="jform" data-id="${esc(r.id)}"><div class="tiprow" role="group" aria-label="Tipul notei">${TIPURI.map(([k, n], i) => `<button type="button" class="tip" data-tip="${k}" aria-pressed="${i === 0}">${n}</button>`).join('')}</div>
     <textarea class="inp" id="j-text" maxlength="4000" placeholder="Ce s-a întâmplat și ce urmează? Ex.: am vorbit cu șeful de logistică; trimitem ofertă Sibiu → București până vineri."></textarea>
     <div style="display:flex;gap:10px;align-items:center"><button class="btn pri sm">${ico('plus')}Adaugă în jurnal</button><span class="err" id="j-err"></span></div></form>`;
@@ -1458,7 +1463,7 @@ function contTeam(r) {
   return (D.contBy[r.id] || []).map(c => `<div class="contact"><span class="ci">${ico('person')}</span><div class="cv"><b>${esc(c.nume || '—')}</b><span>${esc(c.rol || '')}${c.rol ? ' · ' : ''}adăugat de ${esc(who(c.autor))}</span></div>
     ${c.tel ? `<span class="mono">${esc(c.tel)}</span><button class="btn sm ghost" data-copy="${esc(c.tel)}" aria-label="Copiază telefonul">${ico('copy')}</button>` : ''}
     ${c.email ? `<span class="mono">${esc(c.email)}</span><button class="btn sm ghost" data-copy="${esc(c.email)}" aria-label="Copiază e-mailul">${ico('copy')}</button>` : ''}
-    ${D.canWrite && (c.autor === D.uid || D.isOwner) ? `<button class="link" data-delcont="${esc(c.id)}">șterge</button>` : ''}</div>`).join('');
+    ${canEdit(r) && (c.autor === D.uid || D.isOwner) ? `<button class="link" data-delcont="${esc(c.id)}">șterge</button>` : ''}</div>`).join('');
 }
 function tabBody(r) {
   const dims = r.fisa.dims || {};
@@ -1468,7 +1473,7 @@ function tabBody(r) {
     ${(r.telefoane || []).map(t => `<div class="contact"><span class="ci">${ico('phone')}</span><div class="cv"><b class="mono" style="font-size:14px">${esc(t)}</b><span>telefon public, din cercetare</span></div><button class="btn sm" data-copy="${esc(t)}">${ico('copy')}Copiază</button></div>`).join('')}
     <div id="p-cteam">${contTeam(r)}</div>
     ${!(r.emails || []).length && !(r.telefoane || []).length && !(D.contBy[r.id] || []).length ? '<div class="empty"><b>Niciun contact încă</b>Fișa nu are date publice. Adaugă persoana cu care vorbești.</div>' : ''}
-    ${D.db && D.canWrite ? `<form class="cform" id="cform" data-id="${esc(r.id)}"><label class="field">Nume<input class="inp" id="c-nume" placeholder="Ex.: Ana Pop"></label><label class="field">Rol<input class="inp" id="c-rol" placeholder="Ex.: șef logistică"></label>
+    ${canEdit(r) ? `<form class="cform" id="cform" data-id="${esc(r.id)}"><label class="field">Nume<input class="inp" id="c-nume" placeholder="Ex.: Ana Pop"></label><label class="field">Rol<input class="inp" id="c-rol" placeholder="Ex.: șef logistică"></label>
       <label class="field">Telefon<input class="inp" id="c-tel" placeholder="07xx xxx xxx"></label><label class="field">E-mail<input class="inp" id="c-email" placeholder="nume@firma.ro"></label>
       <div class="acts"><button class="btn pri sm">${ico('plus')}Adaugă contact</button><span class="err" id="c-err"></span></div></form>` : ''}</div>`;
   if (S.ptab === 'fisa') return `<div class="card fisa"><header><h3>${ico('note')}Fișa de cercetare</h3><span class="faint" style="font-size:13px">${esc(r.runda)}</span></header>
@@ -1478,7 +1483,7 @@ function tabBody(r) {
   return `${nextHTML(r)}
     ${r.fisa.pas ? `<div class="card"><header><h3>${ico('arrow')}${esc(r.fisa.pas_label === 'Pas' ? 'Pasul recomandat de cercetare' : (r.fisa.pas_label || 'Recomandare'))}</h3></header><div class="recom fisa">${r.fisa.pas}</div></div>` : ''}
     <div class="card"><header><h3>${ico('note')}Ultimele note</h3>${(D.obsBy[r.id] || []).length > 3 ? '<button class="link" data-ptab="jurnal">Tot jurnalul</button>' : ''}</header>
-      ${D.db && D.canWrite ? `<button class="btn sm" data-ptab="jurnal" style="margin-bottom:12px">${ico('plus')}Adaugă o notă</button>` : ''}<ul class="timeline" id="p-jlist">${jurnalItems(r, 3)}</ul></div>`;
+      ${canEdit(r) ? `<button class="btn sm" data-ptab="jurnal" style="margin-bottom:12px">${ico('plus')}Adaugă o notă</button>` : ''}<ul class="timeline" id="p-jlist">${jurnalItems(r, 3)}</ul></div>`;
 }
 function profileHTML(r) {
   const pred = (PREDECESORI[r.id] || []).map(i => BYID.get(i)).filter(Boolean);
@@ -1490,6 +1495,7 @@ function profileHTML(r) {
     <div class="ph-name"><h2 id="p-title">${esc(r.nume)}</h2>${r.red_flag ? `<span class="flag f-red">${ico('alert')}${esc(r.red_flag)}</span>` : ''}${r.oltenia ? '<span class="flag f-olt">Oltenia</span>' : ''}${r.hu ? '<span class="flag f-hu">Flux HU</span>' : ''}</div>
     <div class="ph-sub">${esc(r.titlu)}</div>
     <div class="ph-ctrl">${respHTML(r)}${stageHTML(r)}</div>
+    ${D.db && D.canWrite && !canEdit(r) && r.status === 'tinta' ? `<p class="note" style="margin:6px 0 0">${ico('alert')}Doar pentru citire: ${respOf(r) ? 'clientul e alocat lui ' + esc(teamName(respOf(r))) : 'clientul nu e alocat'}. Modificările le face responsabilul sau un Admin.</p>` : ''}
     ${tabsHTML(r)}</div>
   <div class="ph-body"><div class="ph-main" id="p-main">${tabBody(r)}</div>
     <div class="ph-aside">
@@ -1619,6 +1625,7 @@ document.addEventListener('click', async e => {
     }
     changeStage(S.open, k); return;
   }
+  if ((d.delobs || d.delcont) && !canEdit(BYID.get(((d.delobs ? D.obs : D.cont).find(x => x.id === (d.delobs || d.delcont)) || {}).cid))) { toast(NOEDIT); return; }
   if (d.delobs) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } await write(() => D.db.doc('observatii/' + d.delobs).delete()); return; }
   if (d.delcont) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } await write(() => D.db.doc('contacte/' + d.delcont).delete()); return; }
   if (d.rm) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi?'; return; } const membri = team().filter(x => x.k !== d.rm); await write(() => D.db.doc('config/echipa').set({ membri })); return; }
@@ -1669,6 +1676,7 @@ document.addEventListener('submit', async e => {
     st.textContent = ok ? 'Salvat.' : 'Nesalvat.'; if (ok) schedule(true); return;
   }
   if (f.id === 'motivform') { const k = f.dataset.k; await changeStage(S.open, k, $('#m-text').value.trim()); return; }
+  if ((f.id === 'jform' || f.id === 'cform') && !canEdit(BYID.get(f.dataset.id))) { toast(NOEDIT); return; }
   if (f.id === 'jform') {
     const text = $('#j-text').value.trim(), err = $('#j-err');
     if (!text) { err.textContent = 'Scrie ce s-a întâmplat înainte să adaugi nota.'; $('#j-text').focus(); return; }
