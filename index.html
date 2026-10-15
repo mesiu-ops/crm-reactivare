@@ -1200,7 +1200,7 @@ function viewClienti() {
     </div>`;
   }).join('');
   const bulk = S.sel.size && cw ? `<div class="tb bulkmode"><b>${S.sel.size} selectați</b>
-      <label>Alocă la <select id="bulk-resp"><option value="">alege…</option>${team().map(m => `<option value="${esc(m.k)}">${esc(m.n)}</option>`).join('')}<option value="_none">Nealocat</option></select></label>
+      ${D.canAdmin ? `<label>Alocă la <select id="bulk-resp"><option value="">alege…</option>${team().map(m => `<option value="${esc(m.k)}">${esc(m.n)}</option>`).join('')}<option value="_none">Nealocat</option></select></label>` : ''}
       <label>Etapă <select id="bulk-etapa"><option value="">neschimbată</option>${ETAPE.map(e => `<option value="${e.k}">${e.n}</option>`).join('')}</select></label>
       <button class="btn pri sm" data-act="bulk">Aplică</button><button class="btn sm" data-act="selnone">Renunță</button></div>` : '';
   return `<div class="phead"><div><h1>Clienți <span class="hcount num">${rows.length}</span></h1><p>${b ? `${fmtInt(a)}–${fmtInt(b)} curse/an estimate pentru lista curentă` : 'Lista curentă'}</p></div>
@@ -1422,8 +1422,8 @@ function stageHTML(r) {
 }
 function respHTML(r) {
   if (r.status !== 'tinta') return '<span id="p-respw"></span>';
-  const rk = respOf(r), ro = !(D.db && D.canWrite);
-  return `<label class="who" id="p-respw" style="gap:10px">${avatar(rk, teamName(rk))}<select class="inp" id="p-resp" ${ro ? 'disabled' : ''} style="width:auto;padding:6px 30px 6px 10px" aria-label="Responsabil">
+  const rk = respOf(r), ro = !(D.db && D.canWrite && D.canAdmin);   // alocarea o face doar un Admin (Matei, 15.10.2026)
+  return `<label class="who" id="p-respw" style="gap:10px"${D.canAdmin ? '' : ' title="Alocarea o face doar un Admin"'}>${avatar(rk, teamName(rk))}<select class="inp" id="p-resp" ${ro ? 'disabled' : ''} style="width:auto;padding:6px 30px 6px 10px" aria-label="Responsabil">
     <option value="">Nealocat</option>${team().map(m => `<option value="${esc(m.k)}" ${m.k === rk ? 'selected' : ''}>${esc(m.n)}</option>`).join('')}</select></label>`;
 }
 function tabsHTML(r) {
@@ -1575,6 +1575,7 @@ document.addEventListener('change', e => {
   if (t.dataset.fopt) { const s = S.f[t.dataset.fopt]; if (t.checked) s.add(t.value); else s.delete(t.value); S.sel.clear(); S.limit = 120; render(); return; }
   if (t.dataset.selid) { if (t.checked) S.sel.add(t.dataset.selid); else S.sel.delete(t.dataset.selid); render(); return; }
   if (t.dataset.act === 'selall') { const ids = filtered().filter(r => r.status === 'tinta').map(r => r.id); if (t.checked) ids.forEach(i => S.sel.add(i)); else S.sel.clear(); render(); return; }
+  if (t.id === 'p-resp' && S.open && !D.canAdmin) { toast('Doar un Admin poate aloca clienți.'); render(); return; }
   if (t.id === 'p-resp' && S.open) { const v = t.value || null; setProg(S.open, { resp: v }).then(ok => { if (ok) toast(v ? 'Alocat la ' + teamName(v) + '.' : 'Clientul a rămas nealocat.'); }); return; }
 });
 document.addEventListener('input', e => {
@@ -1634,8 +1635,8 @@ document.addEventListener('click', async e => {
     case 'undo': if (S.undo) { const u = S.undo; S.undo = null; $('#toast-root').innerHTML = ''; await u(); } return;
     case 'motivcancel': $('#p-motiv').innerHTML = ''; return;
     case 'bulk': {
-      const resp = $('#bulk-resp').value, et = $('#bulk-etapa').value;
-      if (!resp && !et) { toast('Alege un responsabil sau o etapă.'); return; }
+      const resp = D.canAdmin && $('#bulk-resp') ? $('#bulk-resp').value : '', et = $('#bulk-etapa').value;
+      if (!resp && !et) { toast(D.canAdmin ? 'Alege un responsabil sau o etapă.' : 'Alege o etapă.'); return; }
       const ids = [...S.sel]; let ok = 0; t.disabled = true;
       for (const id of ids) { const patch = {}; if (resp) patch.resp = resp === '_none' ? null : resp; if (et) patch.etapa = et; if (await setProg(id, patch)) ok++; }
       S.sel.clear(); toast(`${ok} din ${ids.length} clienți actualizați.`); render(); return;
