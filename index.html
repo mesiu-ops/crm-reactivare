@@ -1118,7 +1118,7 @@ const SEGS = [
   ['hu', 'Flux cu Ungaria', r => r.status === 'tinta' && r.hu],
   ['activtms', 'Relație activă în TMS', r => !!(r.tms && r.tms.activ) && !['exclus', 'mort'].includes(r.status)],
   ['istoric', 'Din istoric TMS, fără fișă', r => r.status === 'istoric'],
-  ['indirect', 'Indirect – prin casă de expediții', r => !!r.ind && !['exclus', 'mort'].includes(r.status)],
+  ['indirect', 'Indirect – prin casă de expediții', r => doarIndirect(r) && !['exclus', 'mort'].includes(r.status)],
   ['cuistoric', 'Toți cu curse în istoric', r => !!r.tms && !['exclus', 'mort', 'neidentificat'].includes(r.status)],
   ['rf', 'Red flags', r => !!r.red_flag && r.status !== 'mort'],
   ['excluse', 'Excluse', r => r.status === 'exclus'],
@@ -1140,7 +1140,7 @@ const FACETS = [
   { k: 'descl', t: 'Descarcă în (localitate)', opts: () => locOpts('desc'), val: r => r._descA || [], search: true, big: true, ph: 'Caută localitatea' },
   { k: 'culoar', t: 'Culoar (încărcare → descărcare)', opts: () => culOpts(), val: r => r._cul || [], search: true, big: true, ph: 'Caută județul, ex. PH sau Dolj' },
   { k: 'relatie', t: 'Relație în TMS', opts: () => REL_OPTS, val: r => [relOf(r)] },
-  { k: 'canal', t: 'Canal în TMS', opts: () => [['direct', 'Direct (comandă proprie la Dumagas)'], ['indirect', 'Indirect – prin casă de expediții'], ['_none', 'Fără curse în TMS']], val: r => canalOf(r) },
+  { k: 'canal', t: 'Canal în TMS', opts: () => [['direct', 'Doar direct (comandă proprie la Dumagas)'], ['ambele', 'Direct și, uneori, prin case de expediții'], ['indirect', 'Indirect – doar prin case de expediții'], ['_none', 'Fără curse în TMS']], val: r => canalOf(r) },
   { k: 'ultan', t: 'Anul ultimei curse', opts: () => [...R_ANI.slice().reverse().map(y => [y, y === '2026' ? '2026 (până la 15.10)' : y]), ['_pre', '2016 (înainte de exportul TMS)'], ['_none', 'Fără curse găsite']],
     val: r => [r.tms && r.tms.ultima ? r.tms.ultima.slice(0, 4) : doar2016(r) ? '_pre' : '_none'] },
   { k: 'varf', t: 'Lună de vârf (TMS)', opts: () => LUNI.map((n, i) => [String(i), cap1(n)]), val: r => r.tms && r.tms.sezon ? r.tms.sezon.varf.map(String) : [] },
@@ -1311,7 +1311,7 @@ function viewClienti() {
     return `<div class="lrow${S.sel.has(r.id) ? ' sel' : ''}" tabindex="0" data-open="${esc(r.id)}">
       <div class="c-sel">${canEdit(r) && lucrabil(r) ? `<input type="checkbox" class="rowsel" data-selid="${esc(r.id)}" aria-label="Selectează ${esc(r.nume)}" ${S.sel.has(r.id) ? 'checked' : ''}>` : ''}</div>
       <div class="c-name cname"><b>${esc(r.nume)}${r.red_flag ? `<span class="flag f-red">${esc(r.red_flag)}</span>` : ''}</b>
-        <small>${esc(r.sector || STATUS_N[r.status])} ${plates(r, 3)}${r.hu ? '<span class="flag f-hu">HU</span>' : ''}${r.tms && r.tms.activ && r.status !== 'curent' ? `<span class="flag f-act">${r.tms.indirect ? 'activ prin intermediari' : 'activ în TMS'}</span>` : ''}${r.ind && !['exclus', 'mort'].includes(r.status) ? '<span class="flag f-ind">indirect</span>' : ''}</small></div>
+        <small>${esc(r.sector || STATUS_N[r.status])} ${plates(r, 3)}${r.hu ? '<span class="flag f-hu">HU</span>' : ''}${r.tms && r.tms.activ && r.status !== 'curent' ? `<span class="flag f-act">${r.tms.indirect ? 'activ prin intermediari' : 'activ în TMS'}</span>` : ''}${r.ind && !['exclus', 'mort'].includes(r.status) ? (areDirect(r) ? '<span class="flag f-ind">și indirect</span>' : '<span class="flag f-ind">indirect</span>') : ''}</small></div>
       <div class="c-resp"><span class="who">${avatar(rk, teamName(rk))}<span>${rk ? esc(teamName(rk)) : '<span class="faint">Nealocat</span>'}</span></span></div>
       <div class="c-stage">${lucrabil(r) ? stageTag(e) : `<span class="flag f-gray">${esc(STATUS_N[r.status])}</span>`}</div>
       <div class="c-vol vol"><b class="num">${volTxt(r)}</b><small>c/an</small><div class="vbar"><i style="width:${Math.min(100, 100 * Math.sqrt((r.vol_max || 0) / MAXVOL)).toFixed(0)}%"></i></div></div>
@@ -1542,11 +1542,13 @@ function heatHTML(t) {
 
 /* ---------- indirect: clientul efectiv al mărfii din cursele caselor de expediții (16.10.2026) ---------- */
 const TIPB_N = { producator: 'producător', retail: 'depozit retailer', '3pl': 'depozit 3PL, marfa clienților depozitului' };
-const canalOf = r => { const v = []; if (r.tms && !r.tms.indirect) v.push('direct'); if (r.ind) v.push('indirect'); return v.length ? v : ['_none']; };
+const areDirect = r => !!(r.tms && !r.tms.indirect);
+const doarIndirect = r => !!r.ind && !areDirect(r);   // „Indirect” = marfa a mers DOAR prin case de expediții
+const canalOf = r => [areDirect(r) && r.ind ? 'ambele' : areDirect(r) ? 'direct' : r.ind ? 'indirect' : '_none'];
 const prinHTML = (prin, lim = 6) => (prin || []).slice(0, lim).map(([id, n]) => { const x = BYID.get(id); return x ? `<button class="link" data-open="${esc(id)}">${esc(x.nume)}</button> (${fmtInt(n)})` : ''; }).filter(Boolean).join(', ');
 function indCardHTML(r) {   // fișă existentă: cursele indirecte, separat de cele directe
   const t = r.ind; if (!t || (r.tms && r.tms.indirect)) return '';
-  return `<div class="card"><header><h3>${ico('swap')}Indirect, prin case de expediții</h3><span class="faint" style="font-size:13px">${fmtInt(t.total)} curse ${esc(String(t.prima || '').slice(0, 4))}–${esc(String(t.ultima || '').slice(0, 4))}</span></header>
+  return `<div class="card"><header><h3>${ico('swap')}Și prin case de expediții (pe lângă cursele directe)</h3><span class="faint" style="font-size:13px">${fmtInt(t.total)} curse ${esc(String(t.prima || '').slice(0, 4))}–${esc(String(t.ultima || '').slice(0, 4))}</span></header>
     <p style="margin:0">Marfa acestui client a mers cu Dumagas și prin intermediari: <b>${fmtInt(t.total)} curse</b>${t.n12 ? `, ${fmtInt(t.n12)} în ultimele 12 luni` : ''}, ultima pe ${fmtDate(t.ultima)}. Prin: ${prinHTML(t.prin)}.</p>
     ${(t.inc || []).length ? `<p class="note">Încărcat în: ${(t.inc || []).slice(0, 5).map(x => esc(locLabel(x[0])) + ' ' + fmtInt(x[1])).join(', ')}. Descărcat în județele: ${Object.keys(t.desc_j || {}).slice(0, 6).map(esc).join(', ')}.</p>` : ''}
     ${(t.dovezi || []).length ? `<p class="note">Din textul TMS al punctului de încărcare: „${esc(t.dovezi[0])}”.</p>` : ''}</div>`;
@@ -1947,7 +1949,7 @@ function profileHTML(r) {
   const kv = (k, v) => v ? `<div><span>${k}</span><span>${v}</span></div>` : '';
   return `<div class="ph-top"><div class="ph-bar"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${srcBadge(r)}<span class="faint" style="font-size:13px">${esc(r.runda)}</span></span>
       <button class="btn sm" id="p-close" data-act="close" aria-label="Închide fișa">${ico('x')}Închide</button></div>
-    <div class="ph-name"><h2 id="p-title">${esc(r.nume)}</h2>${r.red_flag ? `<span class="flag f-red">${ico('alert')}${esc(r.red_flag)}</span>` : ''}${r.oltenia ? '<span class="flag f-olt">Oltenia</span>' : ''}${r.hu ? '<span class="flag f-hu">Flux HU</span>' : ''}${r.tms && r.tms.ultima ? `<span class="flag ${r.tms.activ ? 'f-act' : 'f-ult'}">${ico('truck')}${r.tms.activ ? (r.tms.indirect ? 'Activ prin intermediari · ' : 'Activ în TMS · ') : ''}ultima cursă ${fmtDate(r.tms.ultima)} · ${vechime(r.tms.ultima)}</span>` : doar2016(r) ? `<span class="flag f-ult">${ico('truck')}ultima cursă în 2016</span>` : ''}${r.ind ? `<span class="flag f-ind">${ico('swap')}Indirect · ${(r.ind.prin || []).length === 1 ? 'printr-o casă' : 'prin ' + (r.ind.prin || []).length + ' case'} de expediții</span>` : ''}</div>
+    <div class="ph-name"><h2 id="p-title">${esc(r.nume)}</h2>${r.red_flag ? `<span class="flag f-red">${ico('alert')}${esc(r.red_flag)}</span>` : ''}${r.oltenia ? '<span class="flag f-olt">Oltenia</span>' : ''}${r.hu ? '<span class="flag f-hu">Flux HU</span>' : ''}${r.tms && r.tms.ultima ? `<span class="flag ${r.tms.activ ? 'f-act' : 'f-ult'}">${ico('truck')}${r.tms.activ ? (r.tms.indirect ? 'Activ prin intermediari · ' : 'Activ în TMS · ') : ''}ultima cursă ${fmtDate(r.tms.ultima)} · ${vechime(r.tms.ultima)}</span>` : doar2016(r) ? `<span class="flag f-ult">${ico('truck')}ultima cursă în 2016</span>` : ''}${r.ind ? `<span class="flag f-ind">${ico('swap')}${areDirect(r) ? `Direct; și ${fmtInt(r.ind.total)} curse ${(r.ind.prin || []).length === 1 ? 'printr-o casă' : 'prin ' + (r.ind.prin || []).length + ' case'} de expediții` : `Indirect · ${(r.ind.prin || []).length === 1 ? 'printr-o casă' : 'prin ' + (r.ind.prin || []).length + ' case'} de expediții`}</span>` : ''}</div>
     <div class="ph-sub">${esc(r.titlu)}</div>
     <div class="ph-ctrl">${respHTML(r)}${stageHTML(r)}</div>
     ${D.db && D.canWrite && !canEdit(r) && lucrabil(r) ? `<p class="note" style="margin:6px 0 0">${ico('alert')}Doar pentru citire: ${respOf(r) ? 'clientul e alocat lui ' + esc(teamName(respOf(r))) : 'clientul nu e alocat'}. Modificările le face responsabilul sau un Admin.</p>` : ''}
@@ -1961,7 +1963,7 @@ function profileHTML(r) {
         ${kv('Încărcare', (plates(r, 8) || '—') + (r.areal ? `<br><span class="faint" style="font-size:13px">${esc(r.areal)}</span>` : ''))}
         ${kv(r.ca_an && r.ca_an !== 2025 ? 'CA ' + r.ca_an : 'CA 2025', `<span class="num">${fmtCA(r.ca2025)} RON</span>${r.sursa === 'tms' ? (r.angajati != null ? ` · ${fmtInt(r.angajati)} angajați` : '') : ` · clasă ${esc(r.clasa || '—')}`}`)}
         ${r.tms ? kv(r.tms.indirect ? 'Curse indirecte' : 'Istoric TMS', `<span class="num">${fmtInt(r.tms.total)}</span> curse ${esc(String(r.tms.prima || '').slice(0, 4))}–${esc(String(r.tms.ultima || '').slice(0, 4))}<br><span class="faint" style="font-size:13px">${r.tms.n12 ? fmtInt(r.tms.n12) + ' în ultimele 12 luni' : 'niciuna în ultimele 12 luni'} · <button class="link" data-ptab="rute">rutele</button></span>`) : ''}
-        ${r.ind && !(r.tms && r.tms.indirect) ? kv('Indirect', `<span class="num">${fmtInt(r.ind.total)}</span> curse prin ${(r.ind.prin || []).length} case de expediții<br><span class="faint" style="font-size:13px">ultima ${fmtDate(r.ind.ultima)}</span>`) : ''}
+        ${r.ind && !(r.tms && r.tms.indirect) ? kv('Și indirect', `<span class="num">${fmtInt(r.ind.total)}</span> curse ${(r.ind.prin || []).length === 1 ? 'printr-o casă' : 'prin ' + (r.ind.prin || []).length + ' case'} de expediții<br><span class="faint" style="font-size:13px">ultima ${fmtDate(r.ind.ultima)}</span>`) : ''}
         ${r.sursa === 'tms' && r.adresa ? kv('Sediu', esc(r.adresa)) : ''}
         ${kv('CUI', `<span class="mono">${esc(r.cui || '—')}</span>${r.cui ? ` <button class="btn sm ghost" data-copy="${esc(r.cui)}" aria-label="Copiază CUI">${ico('copy')}</button>` : ''}`)}
         ${kv('Prima cursă', r.prima_cursa ? `${fmtDate(r.prima_cursa)} · ${esc((r.vehicul_istoric || []).join(', '))}` : (r.in_fisier === false ? '<span class="faint">client din afara fișierului</span>' : '—'))}
