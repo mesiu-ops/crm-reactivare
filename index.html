@@ -256,7 +256,7 @@ textarea.inp { resize: vertical; min-height: 76px; }
 
 /* listă */
 .list { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; box-shadow: var(--shadow-1); }
-.lrow { display: grid; grid-template-columns: 36px minmax(240px, 2.3fr) 150px 132px 128px 112px minmax(190px, 1.7fr); gap: 14px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line); cursor: pointer; }
+.lrow { display: grid; grid-template-columns: 36px minmax(160px, 2.3fr) minmax(110px, 150px) minmax(100px, 132px) minmax(90px, 120px) minmax(92px, 116px) minmax(84px, 112px) minmax(120px, 1.7fr); gap: 14px; align-items: center; padding: 12px 18px; border-top: 1px solid var(--line); cursor: pointer; }
 .lrow:first-child { border-top: 0; }
 .lrow:hover { background: var(--surface-2); }
 .lrow.sel { background: var(--accent-soft); }
@@ -427,14 +427,14 @@ textarea.inp { resize: vertical; min-height: 76px; }
 .toast button { border: 0; background: none; color: var(--toast-link); font-weight: 700; }
 
 @media (max-width: 1280px) {
-  .lrow { grid-template-columns: 36px minmax(220px, 2fr) 140px 128px 110px minmax(160px, 1.4fr); }
+  .lrow { grid-template-columns: 36px minmax(160px, 2fr) minmax(110px, 140px) minmax(100px, 128px) minmax(90px, 110px) minmax(92px, 108px) minmax(120px, 1.4fr); }
   .lrow .c-risk { display: none; }
 }
 @media (max-width: 1100px) {
   .ph-body { grid-template-columns: minmax(0, 1fr); }
   .g4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .mapwrap { grid-template-columns: minmax(0, 1fr); }
-  .lrow { grid-template-columns: 36px minmax(200px, 2fr) 128px 110px minmax(150px, 1.3fr); }
+  .lrow { grid-template-columns: 36px minmax(140px, 2fr) minmax(100px, 128px) minmax(90px, 110px) minmax(92px, 108px) minmax(110px, 1.3fr); }
   .lrow .c-resp { display: none; }
 }
 @media (max-width: 900px) {
@@ -457,7 +457,8 @@ textarea.inp { resize: vertical; min-height: 76px; }
   .fp-cats { display: flex; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); border-radius: 12px 12px 0 0; scrollbar-width: none; }
   .fp-cats button { white-space: nowrap; }
   .tb .sp { display: none; }
-  .lrow { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "s n v" "s e e" "s x x"; row-gap: 8px; padding: 14px; }
+  .lrow { grid-template-columns: 28px minmax(0, 1fr) auto; grid-template-areas: "s n v" "s e u" "s x x"; row-gap: 8px; padding: 14px; }
+  .lrow .c-ult { grid-area: u; text-align: right; }
   .lrow.head { display: none; }
   .lrow .c-sel { grid-area: s; align-self: start; } .lrow .c-name { grid-area: n; } .lrow .c-vol { grid-area: v; text-align: right; }
   .lrow .c-stage { grid-area: e; } .lrow .c-next { grid-area: x; }
@@ -473,6 +474,8 @@ textarea.inp { resize: vertical; min-height: 76px; }
 }
 
 /* ---------- Rute: istoricul TMS (16.10.2026) ---------- */
+.c-ult { display: grid; gap: 1px; font-size: 14px; } .c-ult small { font-size: 12.5px; color: var(--muted); } .c-ult small.on { color: var(--ok); font-weight: 600; }
+.flag.f-ult { color: var(--muted); background: var(--surface-3); }
 :root { --c-dus: #1F64C7; --c-intors: #B97410; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --c-dus: #4A8ACB; --c-intors: #C0861F; } }
 :root[data-theme="dark"] { --c-dus: #4A8ACB; --c-intors: #C0861F; }
@@ -692,6 +695,11 @@ const fmtShort = s => { const m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2}
 const fmtInt = n => Number(n || 0).toLocaleString('ro-RO');
 const fmtCA = v => v == null ? '—' : v >= 1e9 ? (v / 1e9).toFixed(1).replace('.', ',') + ' mld' : v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + ' mil' : v >= 1e3 ? Math.round(v / 1e3) + ' mii' : String(Math.round(v));
 const daysAgo = iso => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 864e5) : null;
+const vechime = iso => { const d = daysAgo(iso); if (d == null) return ''; if (d <= 0) return 'azi'; if (d === 1) return 'ieri'; if (d < 31) return `acum ${d} zile`;
+  const m = Math.round(d / 30.44); if (m < 12) return m === 1 ? 'acum o lună' : `acum ${m} luni`; const y = Math.floor(d / 365.25); return y === 1 ? 'acum un an' : `acum ${y} ani`; };
+const doar2016 = r => !r.tms && r.in_fisier !== false && String(r.prima_cursa || '').startsWith('2016');   // în fișier din 2016, absent din TMS 2017–2026
+const ultHTML = r => r.tms && r.tms.ultima ? `<b class="num">${fmtDate(r.tms.ultima)}</b><small class="${r.tms.activ ? 'on' : ''}">${vechime(r.tms.ultima)}</small>`
+  : doar2016(r) ? '<b>2016</b><small>înainte de TMS</small>' : '<span class="faint">—</span>';
 const ago = iso => { const d = daysAgo(iso); return d == null ? '' : d <= 0 ? 'azi' : d === 1 ? 'ieri' : d < 30 ? `acum ${d} zile` : fmtDate(iso); };
 const LS = {
   get(k, d) { try { const v = localStorage.getItem('crm-rd2.' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
@@ -733,7 +741,7 @@ for (const r of C) {
 }
 
 /* ---------- stare ---------- */
-const FKEYS = ['status', 'sursa', 'resp', 'etapa', 'regiune', 'judet', 'incj', 'incl', 'descj', 'descl', 'relatie', 'varf', 'temp', 'sector', 'vol', 'risc', 'veh', 'clasa'];
+const FKEYS = ['status', 'sursa', 'resp', 'etapa', 'regiune', 'judet', 'incj', 'incl', 'descj', 'descl', 'relatie', 'ultan', 'varf', 'temp', 'sector', 'vol', 'risc', 'veh', 'clasa'];
 const S = { tab: 'acasa', q: '', seg: 'toti', f: {}, sort: { k: 'nr', dir: 1 }, sel: new Set(), open: null, ptab: 'rezumat', hm: 'n', me: LS.get('me', null),
   limit: 120, showAll: {}, pop: null };
 function resetFilters() { FKEYS.forEach(k => { S.f[k] = new Set(); }); }
@@ -1128,6 +1136,8 @@ const FACETS = [
   { k: 'descj', t: 'Descarcă în (județ)', opts: () => JUDX(), val: r => r.tms && r.tms.desc_j ? Object.keys(r.tms.desc_j) : [], search: true, ph: 'Caută județul' },
   { k: 'descl', t: 'Descarcă în (localitate)', opts: () => locOpts('desc'), val: r => r._descA || [], search: true, big: true, ph: 'Caută localitatea' },
   { k: 'relatie', t: 'Relație în TMS', opts: () => REL_OPTS, val: r => [relOf(r)] },
+  { k: 'ultan', t: 'Anul ultimei curse', opts: () => [...R_ANI.slice().reverse().map(y => [y, y === '2026' ? '2026 (până la 15.10)' : y]), ['_pre', '2016 (înainte de exportul TMS)'], ['_none', 'Fără curse găsite']],
+    val: r => [r.tms && r.tms.ultima ? r.tms.ultima.slice(0, 4) : doar2016(r) ? '_pre' : '_none'] },
   { k: 'varf', t: 'Lună de vârf (TMS)', opts: () => LUNI.map((n, i) => [String(i), cap1(n)]), val: r => r.tms && r.tms.sezon ? r.tms.sezon.varf.map(String) : [] },
   { k: 'sursa', t: 'Lista', opts: () => [['domestic', 'Reactivare Domestic'], ['val2', 'Val 2 (foaia de tranzacții)'], ['ioan', 'Clienții lui Ioan'], ['tms', 'Istoric TMS (fără fișă)']], val: r => [r.sursa] },
   { k: 'veh', t: 'Vehicul în fișier', opts: () => [['dube', 'Dube'], ['prelată', 'Prelată'], ['_none', 'Fără istoric']], val: r => (r.vehicul_istoric && r.vehicul_istoric.length) ? r.vehicul_istoric : ['_none'] },
@@ -1147,7 +1157,7 @@ function sorted(list) {
   const k = S.sort.k, d = S.sort.dir, toks = qTokens();
   const by = { nr: r => r._ord, prio: r => -r._prio, nume: r => fold(r.nume), vol: r => -(r.vol_max ?? -1), ca: r => -(r.ca2025 ?? -1),
     risc: r => RISC.indexOf(r.risc), termen: r => P(r).termen || '9999', activ: r => D.last[r.id] ? -new Date(D.last[r.id]).getTime() : 0,
-    ist: r => -(r.tms ? r.tms.total : -1), ultima: r => r.tms && r.tms.ultima ? -Date.parse(r.tms.ultima) : 0 }[k] || (r => r._ord);
+    ist: r => -(r.tms ? r.tms.total : -1), ultima: r => r.tms && r.tms.ultima ? -Date.parse(r.tms.ultima) : doar2016(r) ? -Date.parse('2016-12-31') : 1 }[k] || (r => r._ord);
   const score = r => toks.length && toks.every(t => r._name.includes(t)) ? 0 : 1;
   return list.slice().sort((a, b) => {
     if (toks.length) { const s = score(a) - score(b); if (s) return s; }
@@ -1283,7 +1293,7 @@ function viewClienti() {
   const shown = rows.slice(0, S.limit);
   const cw = D.canWrite;
   const head = `<div class="lrow head"><div class="c-sel">${cw ? `<input type="checkbox" class="rowsel" data-act="selall" aria-label="Selectează tot" ${rows.length && rows.every(r => S.sel.has(r.id)) ? 'checked' : ''}>` : ''}</div>
-    ${[['c-name', 'nume', 'Client'], ['c-resp', null, 'Responsabil'], ['c-stage', null, 'Etapă'], ['c-vol', 'vol', 'Curse / an'], ['c-risk', 'risc', 'Risc'], ['c-next', 'termen', 'Următorul pas']]
+    ${[['c-name', 'nume', 'Client'], ['c-resp', null, 'Responsabil'], ['c-stage', null, 'Etapă'], ['c-vol', 'vol', 'Curse / an'], ['c-ult', 'ultima', 'Ultima cursă'], ['c-risk', 'risc', 'Risc'], ['c-next', 'termen', 'Următorul pas']]
       .map(([c, k, n]) => `<div class="${c}">${k ? `<button class="lbl" data-sortk="${k}">${n}${S.sort.k === k ? (S.sort.dir > 0 ? ' ↑' : ' ↓') : ''}</button>` : `<span class="lbl">${n}</span>`}</div>`).join('')}</div>`;
   const body = shown.map(r => {
     const p = P(r), e = etapaOf(r), rk = respOf(r);
@@ -1294,6 +1304,7 @@ function viewClienti() {
       <div class="c-resp"><span class="who">${avatar(rk, teamName(rk))}<span>${rk ? esc(teamName(rk)) : '<span class="faint">Nealocat</span>'}</span></span></div>
       <div class="c-stage">${lucrabil(r) ? stageTag(e) : `<span class="flag f-gray">${esc(STATUS_N[r.status])}</span>`}</div>
       <div class="c-vol vol"><b class="num">${volTxt(r)}</b><small>c/an</small><div class="vbar"><i style="width:${Math.min(100, 100 * Math.sqrt((r.vol_max || 0) / MAXVOL)).toFixed(0)}%"></i></div></div>
+      <div class="c-ult" title="Ultima cursă în TMS Domestic">${ultHTML(r)}</div>
       <div class="c-risk">${riskTag(r)}</div>
       <div class="c-next nxt">${p.termen ? dateTag(p.termen) : ''}${p.pas ? `<span>${esc(p.pas)}</span>` : (p.termen ? '' : '<span class="faint">—</span>')}</div>
     </div>`;
@@ -1442,7 +1453,7 @@ const PER_N = { tot: '2017–2026', rec: '2024–2026' };
 const RINC = [['tinta', 'Ținte cu fișă'], ['istoric', 'Din istoric, fără fișă'], ['curent', 'Clienți activi'], ['inter', 'Transportatori și expeditori']];
 const REL_OPTS = [['activ', 'Activă (cursă după 15.07.2026)'], ['recent', 'Inactivă, cu curse în 2024–2026'], ['vechi', 'Inactivă, ultima cursă înainte de 2024'], ['_none', 'Fără istoric în TMS']];
 const relOf = r => !r.tms ? '_none' : r.tms.activ ? 'activ' : String(r.tms.ultima || '') >= '2024-01-01' ? 'recent' : 'vechi';
-const relTag = r => !r.tms ? '' : r.tms.activ ? '<span class="rel on">activ</span>' : `<span class="rel">ultima ${esc(String(r.tms.ultima || '').slice(0, 4))}</span>`;
+const relTag = r => !r.tms ? '' : `<span class="rel${r.tms.activ ? ' on' : ''}">ultima ${fmtDate(r.tms.ultima)}</span>`;
 const cap1 = x => String(x).charAt(0).toUpperCase() + String(x).slice(1);
 const titleCase = x => String(x || '').toLowerCase().replace(/(^|[\s-])(\S)/g, (m, a, b) => a + b.toUpperCase());
 const locJ = k => String(k).split('|')[1] || '';
@@ -1539,6 +1550,7 @@ function rutaTab(r) {
   const lanes = (t.culoare || []).slice(0, S.showAll.plane ? 999 : 10);
   return `<section class="grid g4">${kp(fmtInt(t.total), 'Curse 2017–2026', `${t.ani_activi} ani cu activitate`)}${kp(fmtInt(t.medie), 'Media pe an', 'în anii compleți cu curse')}
       ${kp(esc(String(t.prima || '').slice(0, 4)) + '–' + esc(String(t.ultima || '').slice(0, 4)), 'Prima și ultima cursă', `ultima pe ${fmtDate(t.ultima)}`)}${kp(t.activ ? 'Activă' : 'Inactivă', 'Relația', t.activ ? 'cursă după 15.07.2026' : `din ${esc(String(t.ultima || '').slice(0, 7).split('-').reverse().join('.'))}`)}</section>
+    <p class="note" style="margin:0">Ultima cursă: <b>${fmtDate(t.ultima)}</b> (${vechime(t.ultima)})${ultTraseu(t.ult) ? ', ' + esc(ultTraseu(t.ult)) : ''} · ${t.n12 ? fmtInt(t.n12) + ' curse în ultimele 12 luni' : 'nicio cursă în ultimele 12 luni'}.</p>
     ${(t.linii || []).length > 1 ? `<p class="note" style="margin:0">Istoric unit pe linia de producție (CUI-uri diferite în TMS): ${t.linii.map(l => `${esc(l.nume)}, ${fmtInt(l.total)} curse ${esc(String(l.prima || '').slice(0, 4))}–${esc(String(l.ultima || '').slice(0, 4))}`).join(' + ')}.</p>` : ''}
     <div class="card"><header><h3>${ico('chart')}Curse pe an</h3><span class="faint" style="font-size:13px">2026 până la 15.10, mai deschis</span></header>${colsHTML(annual, { h: 150 })}</div>
     <div class="card"><header><h3>${ico('cal')}Sezonalitate</h3><span class="faint" style="font-size:13px">media pe lună, 2017–2025</span></header>
@@ -1874,6 +1886,15 @@ function tabBody(r) {
     <div class="card"><header><h3>${ico('note')}Ultimele note</h3>${(D.obsBy[r.id] || []).length > 3 ? '<button class="link" data-ptab="jurnal">Tot jurnalul</button>' : ''}</header>
       ${canEdit(r) ? `<button class="btn sm" data-ptab="jurnal" style="margin-bottom:12px">${ico('plus')}Adaugă o notă</button>` : ''}<ul class="timeline" id="p-jlist">${jurnalItems(r, 3)}</ul></div>`;
 }
+function ultTraseu(u) {   // „Râmnicu Vâlcea (VL) → Hunedoara (HD), Arad (AR)”; altfel ruta din TMS
+  if (!u) return ''; if (u.sursa === 'WMS') return 'livrare din depozit (WMS)';
+  return (u.inc || []).length || (u.desc || []).length ? `${(u.inc || []).map(locLabel).join(', ') || '?'} → ${(u.desc || []).map(locLabel).join(', ') || '?'}` : titleCase(u.ruta || '');
+}
+function ultKV(r) {
+  if (r.tms && r.tms.ultima) return `<b class="num">${fmtDate(r.tms.ultima)}</b> · <span class="${r.tms.activ ? 'rel on' : 'muted'}">${vechime(r.tms.ultima)}</span>${ultTraseu(r.tms.ult) ? `<br><span class="faint" style="font-size:13px">${esc(ultTraseu(r.tms.ult))}</span>` : ''}`;
+  if (doar2016(r)) return '<span class="faint">în 2016: fișierul de clienți îl are din 2016, iar în TMS 2017–2026 nu apare</span>';
+  return r.in_fisier === false ? '<span class="faint">nu apare în TMS Domestic 2017–2026</span>' : '<span class="faint">negăsită în TMS 2017–2026 (după CUI și nume)</span>';
+}
 function profileHTML(r) {
   const pred = (PREDECESORI[r.id] || []).map(i => BYID.get(i)).filter(Boolean);
   const succ = r.succesor && r.succesor.id ? BYID.get(r.succesor.id) : null;
@@ -1881,7 +1902,7 @@ function profileHTML(r) {
   const kv = (k, v) => v ? `<div><span>${k}</span><span>${v}</span></div>` : '';
   return `<div class="ph-top"><div class="ph-bar"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${srcBadge(r)}<span class="faint" style="font-size:13px">${esc(r.runda)}</span></span>
       <button class="btn sm" id="p-close" data-act="close" aria-label="Închide fișa">${ico('x')}Închide</button></div>
-    <div class="ph-name"><h2 id="p-title">${esc(r.nume)}</h2>${r.red_flag ? `<span class="flag f-red">${ico('alert')}${esc(r.red_flag)}</span>` : ''}${r.oltenia ? '<span class="flag f-olt">Oltenia</span>' : ''}${r.hu ? '<span class="flag f-hu">Flux HU</span>' : ''}${r.tms && r.tms.activ ? `<span class="flag f-act">${ico('truck')}Activ în TMS · ultima cursă ${fmtDate(r.tms.ultima)}</span>` : ''}</div>
+    <div class="ph-name"><h2 id="p-title">${esc(r.nume)}</h2>${r.red_flag ? `<span class="flag f-red">${ico('alert')}${esc(r.red_flag)}</span>` : ''}${r.oltenia ? '<span class="flag f-olt">Oltenia</span>' : ''}${r.hu ? '<span class="flag f-hu">Flux HU</span>' : ''}${r.tms && r.tms.ultima ? `<span class="flag ${r.tms.activ ? 'f-act' : 'f-ult'}">${ico('truck')}${r.tms.activ ? 'Activ în TMS · ' : ''}ultima cursă ${fmtDate(r.tms.ultima)} · ${vechime(r.tms.ultima)}</span>` : doar2016(r) ? `<span class="flag f-ult">${ico('truck')}ultima cursă în 2016</span>` : ''}</div>
     <div class="ph-sub">${esc(r.titlu)}</div>
     <div class="ph-ctrl">${respHTML(r)}${stageHTML(r)}</div>
     ${D.db && D.canWrite && !canEdit(r) && lucrabil(r) ? `<p class="note" style="margin:6px 0 0">${ico('alert')}Doar pentru citire: ${respOf(r) ? 'clientul e alocat lui ' + esc(teamName(respOf(r))) : 'clientul nu e alocat'}. Modificările le face responsabilul sau un Admin.</p>` : ''}
@@ -1894,10 +1915,11 @@ function profileHTML(r) {
         ${kv('Marfă', tchips(r) + `<br><span class="faint" style="font-size:13px">${esc(r.sector || '')}</span>`)}
         ${kv('Încărcare', (plates(r, 8) || '—') + (r.areal ? `<br><span class="faint" style="font-size:13px">${esc(r.areal)}</span>` : ''))}
         ${kv(r.ca_an && r.ca_an !== 2025 ? 'CA ' + r.ca_an : 'CA 2025', `<span class="num">${fmtCA(r.ca2025)} RON</span>${r.sursa === 'tms' ? (r.angajati != null ? ` · ${fmtInt(r.angajati)} angajați` : '') : ` · clasă ${esc(r.clasa || '—')}`}`)}
-        ${r.tms ? kv('Istoric TMS', `<span class="num">${fmtInt(r.tms.total)}</span> curse ${esc(String(r.tms.prima || '').slice(0, 4))}–${esc(String(r.tms.ultima || '').slice(0, 4))}<br><span class="faint" style="font-size:13px">${r.tms.activ ? 'relație activă' : 'ultima cursă ' + fmtDate(r.tms.ultima)} · <button class="link" data-ptab="rute">rutele</button></span>`) : ''}
+        ${r.tms ? kv('Istoric TMS', `<span class="num">${fmtInt(r.tms.total)}</span> curse ${esc(String(r.tms.prima || '').slice(0, 4))}–${esc(String(r.tms.ultima || '').slice(0, 4))}<br><span class="faint" style="font-size:13px">${r.tms.n12 ? fmtInt(r.tms.n12) + ' în ultimele 12 luni' : 'niciuna în ultimele 12 luni'} · <button class="link" data-ptab="rute">rutele</button></span>`) : ''}
         ${r.sursa === 'tms' && r.adresa ? kv('Sediu', esc(r.adresa)) : ''}
         ${kv('CUI', `<span class="mono">${esc(r.cui || '—')}</span>${r.cui ? ` <button class="btn sm ghost" data-copy="${esc(r.cui)}" aria-label="Copiază CUI">${ico('copy')}</button>` : ''}`)}
         ${kv('Prima cursă', r.prima_cursa ? `${fmtDate(r.prima_cursa)} · ${esc((r.vehicul_istoric || []).join(', '))}` : (r.in_fisier === false ? '<span class="faint">client din afara fișierului</span>' : '—'))}
+        ${kv('Ultima cursă', ultKV(r))}
         ${kv('Ruta', r.ruta_istorica ? `<span class="mono">${esc(r.ruta_istorica)}</span>` : '')}
         ${kv('Culoare', r.culoare_fisier ? esc(r.culoare_fisier) : '')}
       </div></div>
@@ -1934,12 +1956,12 @@ async function exportCSV() {
   if (!D.dl || !D.isOwner) return;  // exportul e doar pentru proprietarul paginii (Matei)
   const rows = sorted(filtered());
   const H = ['Nr', 'Lista', 'Status', 'Client', 'Denumire completă', 'CUI', 'Responsabil', 'Etapă', 'Următorul pas', 'Termen', 'Ultima activitate', 'Județe', 'Regiuni', 'Oltenia', 'Flux HU',
-    'Regim temperatură', 'Tip marfă', 'Curse/an min', 'Curse/an max', 'Potențial', 'Risc', 'Red flag', 'Clasă', 'CA 2025 (RON)', 'Prima cursă', 'Vehicul', 'Ruta din fișier', 'Notițe echipa operațională', 'E-mail public', 'Telefon public', 'Curse TMS 2017–2026', 'Ultima cursă TMS', 'Relație TMS', 'Încarcă în (TMS)', 'Descarcă în județele (TMS)'];
+    'Regim temperatură', 'Tip marfă', 'Curse/an min', 'Curse/an max', 'Potențial', 'Risc', 'Red flag', 'Clasă', 'CA 2025 (RON)', 'Prima cursă', 'Vehicul', 'Ruta din fișier', 'Notițe echipa operațională', 'E-mail public', 'Telefon public', 'Curse TMS 2017–2026', 'Ultima cursă TMS', 'Traseul ultimei curse', 'Curse în ultimele 12 luni', 'Relație TMS', 'Încarcă în (TMS)', 'Descarcă în județele (TMS)'];
   const cell = v => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
   const lines = [H.join(';')].concat(rows.map(r => { const p = P(r); return [r.nr, ({ ioan: 'Ioan', val2: 'Val 2', tms: 'Istoric TMS' }[r.sursa] || 'Domestic'), STATUS_N[r.status], r.nume, r.titlu, r.cui, teamName(respOf(r)), ETAPA_N[etapaOf(r)], p.pas, fmtDate(p.termen), fmtDate(D.last[r.id]),
     r.judete.join(', '), r.regiuni.join(', '), r.oltenia ? 'da' : '', r.hu ? 'da' : '', (r.temp || []).join(', '), r.sector, r.vol_min, r.vol_max, r.pot_max ? r.pot_min + '–' + r.pot_max : '', RISC_N[r.risc], r.red_flag, r.clasa,
     r.ca2025 == null ? '' : Math.round(r.ca2025), fmtDate(r.prima_cursa), (r.vehicul_istoric || []).join(', '), r.ruta_istorica, r.nota_fisier, (r.emails || []).join(', '), (r.telefoane || []).join(', '),
-    r.tms ? r.tms.total : '', r.tms ? fmtDate(r.tms.ultima) : '', (REL_OPTS.find(x => x[0] === relOf(r)) || [])[1] || '', r.tms ? (r.tms.inc || []).slice(0, 5).map(x => locLabel(x[0])).join(', ') : '',
+    r.tms ? r.tms.total : '', r.tms ? fmtDate(r.tms.ultima) : (doar2016(r) ? '2016' : ''), r.tms ? ultTraseu(r.tms.ult) : '', r.tms ? (r.tms.n12 || 0) : '', (REL_OPTS.find(x => x[0] === relOf(r)) || [])[1] || '', r.tms ? (r.tms.inc || []).slice(0, 5).map(x => locLabel(x[0])).join(', ') : '',
     r.tms ? Object.keys(r.tms.desc_j || {}).slice(0, 8).join(', ') : ''].map(cell).join(';'); }));
   try { await D.dl.save({ filename: `crm-reactivare-${TODAY}.csv`, data: '﻿' + lines.join('\r\n') }); toast('Fișierul a fost descărcat.'); }
   catch (e) { if (e && e.code !== 'declined') toast('Exportul n-a reușit (' + (e.code || 'eroare') + ').'); }
