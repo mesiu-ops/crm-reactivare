@@ -712,7 +712,7 @@ const plates = (r, max = 4) => r.judete.length ? `<span class="plates">${r.judet
 const tchips = r => (r.temp || []).map(t => `<span class="tchip ${TEMP_C[t] || 't-unk'}">${esc(t)}</span>`).join('');
 const riskTag = r => `<span class="risk ${RISC_C[r.risc] || 'r-dead'}">${esc(RISC_N[r.risc] || '—')}</span>`;
 const volTxt = r => r.vol_min == null ? (r.tms && r.tms.medie ? '~' + fmtInt(r.tms.medie) : '—') : (r.vol_min === r.vol_max ? String(r.vol_min) : `${r.vol_min}–${r.vol_max}`);
-const srcBadge = r => r.sursa === 'indirect' ? '<span class="src ind">Indirect · casă de expediții</span>' : r.sursa === 'tms' ? '<span class="src tms">Istoric TMS</span>' : r.sursa === 'ioan' ? `<span class="src ioan">Ioan · ${esc(r.nr)}</span>` : r.sursa === 'val2' ? `<span class="src val2">Val 2 · ${esc(r.nr)}</span>` : `<span class="src">Domestic · ${esc(r.nr)}</span>`;
+const srcBadge = r => r.sursa === 'indirect' ? '<span class="src ind">Indirect · casă de expediții</span>' : r.sursa === 'tms' ? '<span class="src tms">Istoric TMS</span>' : r.sursa === 'ioan' ? `<span class="src ioan">Ioan · ${esc(r.nr)}</span>` : r.sursa === 'val2' ? `<span class="src val2">Val 2 · ${esc(r.nr)}</span>` : r.sursa === 'val3' ? `<span class="src val2">Val 3 · ${esc(r.nr)}</span>` : `<span class="src">Domestic · ${esc(r.nr)}</span>`;
 const stageTag = k => `<span class="stage s-${k}">${esc(ETAPA_N[k] || k)}</span>`;
 const dateTag = d => !d ? '' : `<span class="date${d < TODAY ? ' late' : d === TODAY ? ' today' : ''}">${ico('cal')}${d === TODAY ? 'azi' : fmtShort(d)}</span>`;
 const initials = n => String(n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0]).join('').toUpperCase();
@@ -730,7 +730,7 @@ for (const r of C) {
   r._clasa = String(r.clasa || '').split(/\s/)[0] || '—';
   r._vb = r.vol_min == null ? null : (VOL_B.find(b => b.t(r.vol_min)) || {}).k;
   r._cul = [...new Set([...((r.tms && r.tms.culoare) || []), ...((r.ind && r.ind.culoare) || [])].map(x => x[0] + '>' + x[1]))];
-  r._ord = ({ domestic: 0, val2: 100000, tms: 300000, indirect: 400000 }[r.sursa] ?? 200000) + (({ tinta: 0, curent: 0, istoric: 1, exclus: 2, mort: 3, neidentificat: 4 }[r.status] ?? 5) * 1000) + (parseInt(String(r.nr).replace(/\D/g, ''), 10) || 0);
+  r._ord = ({ domestic: 0, val2: 100000, val3: 150000, tms: 300000, indirect: 400000 }[r.sursa] ?? 200000) + (({ tinta: 0, curent: 0, istoric: 1, exclus: 2, mort: 3, neidentificat: 4 }[r.status] ?? 5) * 1000) + (parseInt(String(r.nr).replace(/\D/g, ''), 10) || 0);
   if (r.tms) {   // istoricul TMS: seturi de localități pentru filtre + căutare după locul de încărcare
     r._incA = (r.tms.inc || []).map(x => x[0]); r._descA = (r.tms.desc || []).map(x => x[0]); r._inc = new Set(r._incA); r._desc = new Set(r._descA);
     r._hay += ' ' + fold(r._incA.map(k => k.replace('|', ' ')).join(' ') + ' ' + (r.adresa || '') + ' ' + (r.profil_scurt || ''));
@@ -1144,7 +1144,7 @@ const FACETS = [
   { k: 'ultan', t: 'Anul ultimei curse', opts: () => [...R_ANI.slice().reverse().map(y => [y, y === '2026' ? '2026 (până la 15.10)' : y]), ['_pre', '2016 (înainte de exportul TMS)'], ['_none', 'Fără curse găsite']],
     val: r => [r.tms && r.tms.ultima ? r.tms.ultima.slice(0, 4) : doar2016(r) ? '_pre' : '_none'] },
   { k: 'varf', t: 'Lună de vârf (TMS)', opts: () => LUNI.map((n, i) => [String(i), cap1(n)]), val: r => r.tms && r.tms.sezon ? r.tms.sezon.varf.map(String) : [] },
-  { k: 'sursa', t: 'Lista', opts: () => [['domestic', 'Reactivare Domestic'], ['val2', 'Val 2 (foaia de tranzacții)'], ['ioan', 'Clienții lui Ioan'], ['tms', 'Istoric TMS (fără fișă)'], ['indirect', 'Indirect (din cursele caselor de expediții)']], val: r => [r.sursa] },
+  { k: 'sursa', t: 'Lista', opts: () => [['domestic', 'Reactivare Domestic'], ['val2', 'Val 2 (foaia de tranzacții)'], ['val3', 'Val 3 (clienți noi din TMS)'], ['ioan', 'Clienții lui Ioan'], ['tms', 'Istoric TMS (fără fișă)'], ['indirect', 'Indirect (din cursele caselor de expediții)']], val: r => [r.sursa] },
   { k: 'veh', t: 'Vehicul în fișier', opts: () => [['dube', 'Dube'], ['prelată', 'Prelată'], ['_none', 'Fără istoric']], val: r => (r.vehicul_istoric && r.vehicul_istoric.length) ? r.vehicul_istoric : ['_none'] },
   { k: 'clasa', t: 'Clasă de profil', opts: () => CLASE.map(c => [c, c]), val: r => [r._clasa] },
 ];
@@ -1830,7 +1830,7 @@ function viewEchipaBase() {
         <p class="note">Lista e folosită la alocarea clienților. Conturile de acces se gestionează mai jos, în „Conturi cu acces”. Clienții rămân alocați chiar dacă un nume e scos din listă.</p></div>
       <div class="card"><header><h3>${ico('note')}De unde vin datele</h3></header>
         <div class="grid g2" style="gap:12px">${[[nf, 'fișe de cercetare'], [n.tinta, 'ținte'], [nt, 'clienți adăugați din istoricul TMS'], [nh, 'clienți cu curse 2017–2026']].map(([v, l]) => `<div><div class="num" style="font-family:var(--f-display);font-weight:800;font-size:24px">${v}</div><div class="muted" style="font-size:13px">${l}</div></div>`).join('')}</div>
-        <p class="note">Fișele vin din „Reactivare Domestic”, „Reactivare Domestic — Val 2” și „Analiza Clienți Ioan” (cercetare încheiată la ${fmtDate(RAW.generat)}). Prima cursă, ruta, vehiculul și notițele echipei operaționale vin din fișierul de clienți Domestic 2016–2026.</p>
+        <p class="note">Fișele vin din „Reactivare Domestic”, „Reactivare Domestic — Val 2”, „Val 3” (clienții noi din TMS) și „Analiza Clienți Ioan” (cercetare încheiată la ${fmtDate(RAW.generat)}). Prima cursă, ruta, vehiculul și notițele echipei operaționale vin din fișierul de clienți Domestic 2016–2026.</p>
         <p class="note">Încărcările, descărcările, volumul pe ani și sezonalitatea vin din exportul TMS Domestic 2017–2026 (doar curse în România și Ungaria, primit la 16.10.2026). Clienții din istoric fără fișă sunt marcați „Istoric TMS”; transportatorii și casele de expediții sunt lăsați deoparte, în lista Excluse. Clientul efectiv al mărfii din cursele lor (firma de la care s-a încărcat) apare separat, marcat „Indirect · casă de expediții”.</p>
         <p class="note">Textul fișelor nu se modifică din pagină. O greșeală găsită se notează în jurnal ca „Corecție la fișă”; Claude o verifică și o include în versiunea următoare. Etapele, notele, contactele și alocările rămân neatinse la actualizări.</p></div>
     </section>`;
@@ -2004,7 +2004,7 @@ async function exportCSV() {
   const H = ['Nr', 'Lista', 'Status', 'Client', 'Denumire completă', 'CUI', 'Responsabil', 'Etapă', 'Următorul pas', 'Termen', 'Ultima activitate', 'Județe', 'Regiuni', 'Oltenia', 'Flux HU',
     'Regim temperatură', 'Tip marfă', 'Curse/an min', 'Curse/an max', 'Potențial', 'Risc', 'Red flag', 'Clasă', 'CA 2025 (RON)', 'Prima cursă', 'Vehicul', 'Ruta din fișier', 'Notițe echipa operațională', 'E-mail public', 'Telefon public', 'Curse TMS 2017–2026', 'Curse indirecte (prin case de expediții)', 'Prin (case de expediții)', 'Ultima cursă TMS', 'Traseul ultimei curse', 'Curse în ultimele 12 luni', 'Relație TMS', 'Încarcă în (TMS)', 'Descarcă în județele (TMS)'];
   const cell = v => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [H.join(';')].concat(rows.map(r => { const p = P(r); return [r.nr, ({ ioan: 'Ioan', val2: 'Val 2', tms: 'Istoric TMS', indirect: 'Indirect' }[r.sursa] || 'Domestic'), STATUS_N[r.status], r.nume, r.titlu, r.cui, teamName(respOf(r)), ETAPA_N[etapaOf(r)], p.pas, fmtDate(p.termen), fmtDate(D.last[r.id]),
+  const lines = [H.join(';')].concat(rows.map(r => { const p = P(r); return [r.nr, ({ ioan: 'Ioan', val2: 'Val 2', val3: 'Val 3', tms: 'Istoric TMS', indirect: 'Indirect' }[r.sursa] || 'Domestic'), STATUS_N[r.status], r.nume, r.titlu, r.cui, teamName(respOf(r)), ETAPA_N[etapaOf(r)], p.pas, fmtDate(p.termen), fmtDate(D.last[r.id]),
     r.judete.join(', '), r.regiuni.join(', '), r.oltenia ? 'da' : '', r.hu ? 'da' : '', (r.temp || []).join(', '), r.sector, r.vol_min, r.vol_max, r.pot_max ? r.pot_min + '–' + r.pot_max : '', RISC_N[r.risc], r.red_flag, r.clasa,
     r.ca2025 == null ? '' : Math.round(r.ca2025), fmtDate(r.prima_cursa), (r.vehicul_istoric || []).join(', '), r.ruta_istorica, r.nota_fisier, (r.emails || []).join(', '), (r.telefoane || []).join(', '),
     r.tms && !r.tms.indirect ? r.tms.total : '', r.ind ? r.ind.total : '', r.ind ? (r.ind.prin || []).slice(0, 5).map(x => (BYID.get(x[0]) || {}).nume || '').filter(Boolean).join(', ') : '', r.tms ? fmtDate(r.tms.ultima) : (doar2016(r) ? '2016' : ''), r.tms ? ultTraseu(r.tms.ult) : '', r.tms ? (r.tms.n12 || 0) : '', (REL_OPTS.find(x => x[0] === relOf(r)) || [])[1] || '', r.tms ? (r.tms.inc || []).slice(0, 5).map(x => locLabel(x[0])).join(', ') : '',
