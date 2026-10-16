@@ -729,6 +729,7 @@ for (const r of C) {
     strip(r.fisa.meta), ...Object.values(r.fisa.dims || {}).map(strip), strip(r.fisa.pas), strip(r.fisa.quote)].join(' '));
   r._clasa = String(r.clasa || '').split(/\s/)[0] || '—';
   r._vb = r.vol_min == null ? null : (VOL_B.find(b => b.t(r.vol_min)) || {}).k;
+  r._cul = [...new Set([...((r.tms && r.tms.culoare) || []), ...((r.ind && r.ind.culoare) || [])].map(x => x[0] + '>' + x[1]))];
   r._ord = ({ domestic: 0, val2: 100000, tms: 300000, indirect: 400000 }[r.sursa] ?? 200000) + (({ tinta: 0, curent: 0, istoric: 1, exclus: 2, mort: 3, neidentificat: 4 }[r.status] ?? 5) * 1000) + (parseInt(String(r.nr).replace(/\D/g, ''), 10) || 0);
   if (r.tms) {   // istoricul TMS: seturi de localități pentru filtre + căutare după locul de încărcare
     r._incA = (r.tms.inc || []).map(x => x[0]); r._descA = (r.tms.desc || []).map(x => x[0]); r._inc = new Set(r._incA); r._desc = new Set(r._descA);
@@ -742,7 +743,7 @@ for (const r of C) {
 }
 
 /* ---------- stare ---------- */
-const FKEYS = ['status', 'sursa', 'resp', 'etapa', 'regiune', 'judet', 'incj', 'incl', 'descj', 'descl', 'relatie', 'canal', 'ultan', 'varf', 'temp', 'sector', 'vol', 'risc', 'veh', 'clasa'];
+const FKEYS = ['status', 'sursa', 'resp', 'etapa', 'regiune', 'judet', 'incj', 'incl', 'descj', 'descl', 'culoar', 'relatie', 'canal', 'ultan', 'varf', 'temp', 'sector', 'vol', 'risc', 'veh', 'clasa'];
 const S = { tab: 'acasa', q: '', seg: 'toti', f: {}, sort: { k: 'nr', dir: 1 }, sel: new Set(), open: null, ptab: 'rezumat', hm: 'n', me: LS.get('me', null),
   limit: 120, showAll: {}, pop: null };
 function resetFilters() { FKEYS.forEach(k => { S.f[k] = new Set(); }); }
@@ -1137,6 +1138,7 @@ const FACETS = [
   { k: 'incl', t: 'Încarcă în (localitate)', opts: () => locOpts('inc'), val: r => r._incA || [], search: true, big: true, ph: 'Caută localitatea' },
   { k: 'descj', t: 'Descarcă în (județ)', opts: () => JUDX(), val: r => r.tms && r.tms.desc_j ? Object.keys(r.tms.desc_j) : [], search: true, ph: 'Caută județul' },
   { k: 'descl', t: 'Descarcă în (localitate)', opts: () => locOpts('desc'), val: r => r._descA || [], search: true, big: true, ph: 'Caută localitatea' },
+  { k: 'culoar', t: 'Culoar (încărcare → descărcare)', opts: () => culOpts(), val: r => r._cul || [], search: true, big: true, ph: 'Caută județul, ex. PH sau Dolj' },
   { k: 'relatie', t: 'Relație în TMS', opts: () => REL_OPTS, val: r => [relOf(r)] },
   { k: 'canal', t: 'Canal în TMS', opts: () => [['direct', 'Direct (comandă proprie la Dumagas)'], ['indirect', 'Indirect – prin casă de expediții'], ['_none', 'Fără curse în TMS']], val: r => canalOf(r) },
   { k: 'ultan', t: 'Anul ultimei curse', opts: () => [...R_ANI.slice().reverse().map(y => [y, y === '2026' ? '2026 (până la 15.10)' : y]), ['_pre', '2016 (înainte de exportul TMS)'], ['_none', 'Fără curse găsite']],
@@ -1251,7 +1253,7 @@ function viewHome() {
 }
 
 /* ---------- Clienți ---------- */
-const SEG_MAIN = ['toti', 'mei', 'nealocati', 'lucru', 'termene'];
+const SEG_MAIN = ['toti', 'mei', 'nealocati', 'lucru', 'termene', 'indirect'];
 const SORT_N = { nr: 'Ordinea din rapoarte', prio: 'Prioritate', nume: 'Nume', vol: 'Volum', ca: 'Cifra de afaceri', risc: 'Risc', termen: 'Termen', activ: 'Ultima activitate', ist: 'Curse în istoric', ultima: 'Ultima cursă (TMS)' };
 function tabsBar() {
   const toks = qTokens();
@@ -1287,9 +1289,9 @@ function optsHTML(f) {
   return `<h4>${esc(f.t)}${S.f[f.k].size ? ` · <button class="link" data-popclear="${f.k}">golește</button>` : ''}</h4>
     ${f.search ? `<div style="padding:0 4px 8px"><input class="inp" id="popq" placeholder="${esc(f.ph || 'Caută')}" value="${esc(S.popq || '')}" aria-label="Caută în listă"></div>` : ''}
     <div class="opts" style="max-height:none">${opts.map(([k, n]) => `<label class="${!counts[k] && !S.f[f.k].has(k) ? 'dis' : ''}"><input type="checkbox" data-fopt="${f.k}" value="${esc(k)}" ${S.f[f.k].has(k) ? 'checked' : ''}>${esc(n)}<small>${counts[k] || 0}</small></label>`).join('') || '<p class="faint" style="padding:8px">Nicio opțiune.</p>'}</div>
-    ${more ? `<p class="faint" style="padding:6px 8px;font-size:13px;margin:0">Încă ${more} localități: scrie numele ca să le găsești.</p>` : ''}`;
+    ${more ? `<p class="faint" style="padding:6px 8px;font-size:13px;margin:0">Încă ${more} ${f.k === 'culoar' ? 'culoare' : 'localități'}: scrie ca să le găsești.</p>` : ''}`;
 }
-const RUTE_F = ['incj', 'incl', 'descj', 'descl', 'relatie', 'canal', 'ultan', 'varf'];   // filtrele care privesc istoricul TMS
+const RUTE_F = ['incj', 'incl', 'descj', 'descl', 'culoar', 'relatie', 'canal', 'ultan', 'varf'];   // filtrele care privesc istoricul TMS
 function ruteHint(n) {   // țintele sunt doar o parte din clienții cu istoric: arată câți ar fi în „Toți cu curse în istoric”
   if (S.seg === 'cuistoric' || !RUTE_F.some(k => S.f[k].size)) return '';
   const alt = C.filter(r => pass(r, null, qTokens(), 'cuistoric')).length;
@@ -1353,7 +1355,7 @@ function popHTML(key) {
     return `<div class="ph"><b>${esc(f.t)}</b>${S.f[f.k].size ? `<button class="link" data-popclear="${f.k}">Golește</button>` : ''}</div>
       ${f.search ? `<div style="padding:0 4px 8px"><input class="inp" id="popq" placeholder="${esc(f.ph || 'Caută')}" value="${esc(S.popq || '')}" aria-label="Caută în listă"></div>` : ''}
       <div class="opts">${opts.map(([k, n]) => `<label class="${!counts[k] && !S.f[f.k].has(k) ? 'dis' : ''}"><input type="checkbox" data-fopt="${f.k}" value="${esc(k)}" ${S.f[f.k].has(k) ? 'checked' : ''}>${esc(n)}<small>${counts[k] || 0}</small></label>`).join('')}</div>
-      ${more ? `<p class="faint" style="padding:6px 8px;font-size:13px;margin:0">Încă ${more} localități: scrie numele ca să le găsești.</p>` : ''}
+      ${more ? `<p class="faint" style="padding:6px 8px;font-size:13px;margin:0">Încă ${more} ${f.k === 'culoar' ? 'culoare' : 'localități'}: scrie ca să le găsești.</p>` : ''}
       <div class="pf"><span class="faint" style="font-size:13px">${base.length} clienți fără acest filtru</span><button class="btn pri sm" data-act="popclose">Gata</button></div>`;
   }
   if (key === 'more') return `<div class="ph"><b>Mai multe filtre</b></div><div class="menu">${FACETS.filter(f => !f.main).map(f => `<button data-pop="f:${f.k}">${esc(f.t)}${S.f[f.k].size ? ` <span class="n">(${S.f[f.k].size})</span>` : ''}<span style="margin-left:auto">${ico('arrow')}</span></button>`).join('')}</div>`;
@@ -1472,6 +1474,14 @@ const judName = j => j === 'HU' ? 'Ungaria' : (JUD[j] || j);
 const fmtK = n => { n = Math.round(n || 0); return n >= 1e4 ? Math.round(n / 1e3) + ' mii' : n >= 1e3 ? String(Math.round(n / 100) / 10).replace('.', ',') + ' mii' : String(n); };
 const niceMax = v => { if (!(v > 0)) return 1; const p = 10 ** Math.floor(Math.log10(v)), m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p; };
 const JUDX = () => [...Object.keys(JUD).sort((a, b) => JUD[a].localeCompare(JUD[b], 'ro')).map(j => [j, JUD[j] + ' (' + j + ')']), ['HU', 'Ungaria']];
+let _co = null;
+function culOpts() {   // culoarele din istoric, după numărul de clienți: „Prahova → Dolj (PH → DJ)”
+  if (!_co || _co.c !== C) {
+    const n = {}; for (const r of C) for (const k of r._cul || []) n[k] = (n[k] || 0) + 1;
+    _co = { c: C, o: Object.entries(n).sort((a, b) => b[1] - a[1]).map(([k]) => { const [x, y] = k.split('>'); return [k, `${judName(x)} → ${judName(y)} (${x} → ${y})`]; }) };
+  }
+  return _co.o;
+}
 let _lo = null;
 function locOpts(kind) {   // localitățile din istoric, după numărul de curse (pentru filtre și pentru alegerea zonei)
   if (!_lo || _lo.c !== C || _lo.r !== RUTE) {
@@ -1754,7 +1764,11 @@ function rlistGo(kind) {
   const set = (z, kd) => { if (!z) return; S.f[zT(z) === 'j' ? kd + 'j' : kd + 'l'] = new Set([zK(z)]); };
   resetFilters();
   if (kind === 'inc') set(S.ra, 'inc'); else if (kind === 'desc') set(S.ra, 'desc');
-  else if (kind === 'ab') { set(S.ra, 'inc'); set(S.rb, 'desc'); } else if (kind === 'ba') { set(S.rb, 'inc'); set(S.ra, 'desc'); } else if (kind === 'binc') set(S.rb, 'inc');
+  else if (kind === 'ab' || kind === 'ba') {
+    const [x, y] = kind === 'ab' ? [S.ra, S.rb] : [S.rb, S.ra];
+    S.f.culoar = new Set([zJ(x) + '>' + zJ(y)]);
+    if (zT(x) === 'l') S.f.incl = new Set([zK(x)]); if (zT(y) === 'l') S.f.descl = new Set([zK(y)]);
+  } else if (kind === 'binc') set(S.rb, 'inc');
   S.seg = 'cuistoric'; go('clienti');
 }
 
