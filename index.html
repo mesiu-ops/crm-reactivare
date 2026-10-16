@@ -1289,6 +1289,12 @@ function optsHTML(f) {
     <div class="opts" style="max-height:none">${opts.map(([k, n]) => `<label class="${!counts[k] && !S.f[f.k].has(k) ? 'dis' : ''}"><input type="checkbox" data-fopt="${f.k}" value="${esc(k)}" ${S.f[f.k].has(k) ? 'checked' : ''}>${esc(n)}<small>${counts[k] || 0}</small></label>`).join('') || '<p class="faint" style="padding:8px">Nicio opțiune.</p>'}</div>
     ${more ? `<p class="faint" style="padding:6px 8px;font-size:13px;margin:0">Încă ${more} localități: scrie numele ca să le găsești.</p>` : ''}`;
 }
+const RUTE_F = ['incj', 'incl', 'descj', 'descl', 'relatie', 'canal', 'ultan', 'varf'];   // filtrele care privesc istoricul TMS
+function ruteHint(n) {   // țintele sunt doar o parte din clienții cu istoric: arată câți ar fi în „Toți cu curse în istoric”
+  if (S.seg === 'cuistoric' || !RUTE_F.some(k => S.f[k].size)) return '';
+  const alt = C.filter(r => pass(r, null, qTokens(), 'cuistoric')).length;
+  return alt > n ? ` · <button class="link" data-seg="cuistoric">${fmtInt(alt)} în „Toți cu curse în istoric”</button>` : '';
+}
 function viewClienti() {
   const rows = sorted(filtered());
   const [a, b] = sumVol(rows);
@@ -1316,9 +1322,9 @@ function viewClienti() {
       ${D.canAdmin ? `<label>Alocă la <select id="bulk-resp"><option value="">alege…</option>${team().map(m => `<option value="${esc(m.k)}">${esc(m.n)}</option>`).join('')}<option value="_none">Nealocat</option></select></label>` : ''}
       <label>Etapă <select id="bulk-etapa"><option value="">neschimbată</option>${ETAPE.map(e => `<option value="${e.k}">${e.n}</option>`).join('')}</select></label>
       <button class="btn pri sm" data-act="bulk">Aplică</button><button class="btn sm" data-act="selnone">Renunță</button></div>` : '';
-  return `<div class="phead"><div><h1>Clienți <span class="hcount num">${rows.length}</span></h1><p>${b ? `${fmtInt(a)}–${fmtInt(b)} curse/an estimate pentru lista curentă` : 'Lista curentă'}</p></div>
+  return `<div class="phead"><div><h1>Clienți <span class="hcount num">${rows.length}</span></h1><p>${b ? `${fmtInt(a)}–${fmtInt(b)} curse/an estimate pentru lista curentă` : 'Lista curentă'}${ruteHint(rows.length)}</p></div>
       <div class="actions">${views.length ? `<button class="btn" data-pop="views">${ico('bookmark')}Vederi salvate${ico('down')}</button>` : ''}<button class="btn" data-pop="saveview">${ico('plus')}Salvează vederea</button>${D.dl && D.isOwner ? `<button class="btn" data-act="export">${ico('dl')}Export Excel</button>` : ''}</div></div>
-    <div class="list" role="table" aria-label="Clienți">${tabsBar()}${bulk || toolbar()}${head}${body || `<div class="empty"><b>Niciun client nu se potrivește</b>Scoate un filtru sau alege altă listă rapidă.</div>`}
+    <div class="list" role="table" aria-label="Clienți">${tabsBar()}${bulk || toolbar()}${head}${body || `<div class="empty"><b>Niciun client nu se potrivește</b>${S.seg !== 'cuistoric' && RUTE_F.some(k => S.f[k].size) ? `Lista „${esc((SEGS.find(x => x[0] === S.seg) || [, ''])[1])}” are doar o parte din clienți. <button class="btn sm" data-seg="cuistoric" style="margin-top:8px">Caută în toți clienții cu curse în istoric</button>` : 'Scoate un filtru sau alege altă listă rapidă.'}</div>`}
       ${rows.length > shown.length ? `<div class="more-row"><button class="btn" data-act="more">Arată încă ${Math.min(120, rows.length - shown.length)} din ${rows.length - shown.length}</button></div>` : ''}</div>`;
 }
 
@@ -1667,7 +1673,7 @@ function rControls(A, B) {
       <label class="field">De unde pleacă marfa (zona A)<input class="inp" id="rz-a" list="rz-list" autocomplete="off" placeholder="Județ sau localitate, ex. Ploiești" value="${A ? esc(zLabel(A)) : ''}"></label>
       <button class="btn sm" data-act="rswap" ${A && B ? '' : 'disabled'} aria-label="Inversează zonele A și B">${ico('swap')}</button>
       <label class="field">Unde ajunge (zona B, opțional)<input class="inp" id="rz-b" list="rz-list" autocomplete="off" placeholder="Alt județ sau localitate" value="${B ? esc(zLabel(B)) : ''}"></label>
-      ${A || B ? '<button class="link" data-act="rclr" style="margin-bottom:9px">Golește</button>' : '<span></span>'}</div>
+      <button class="link" data-act="rclr" style="margin-bottom:9px">Resetează</button></div>
     <div class="rctl-f"><div class="toggle" role="group" aria-label="Perioada">${Object.entries(PER_N).map(([k, n]) => `<button data-rper="${k}" aria-pressed="${rper() === k}">${n}</button>`).join('')}</div>
       <div class="rinc" role="group" aria-label="Ce clienți intră în calcul">${RINC.map(([k, n]) => `<label><input type="checkbox" data-rinc="${k}" ${S.rinc.has(k) ? 'checked' : ''}>${n}</label>`).join('')}</div></div>
     <datalist id="rz-list">${_lo.zone.map(o => `<option value="${esc(o[1])}"></option>`).join('')}</datalist></div>`;
@@ -1741,6 +1747,7 @@ function viewRute() {
   const head = `<div class="phead"><div><h1>Rute</h1><p>Încărcări și descărcări din istoricul TMS Domestic, doar curse în România și Ungaria, ${PER_N[rper()]}.</p></div></div>`;
   if (!C.some(r => r.tms)) return head + '<div class="card"><div class="empty"><b>Istoricul TMS nu e încă încărcat</b>Rutele apar după importul datelor din TMS.</div></div>';
   const pool = C.filter(inPool);
+  if (!S.rinc.size) return head + rControls(A, B) + '<div class="card"><div class="empty"><b>Nicio categorie de clienți bifată</b>Bifează mai sus cel puțin una dintre „Ținte cu fișă”, „Din istoric”, „Clienți activi”, sau apasă „Resetează”.</div></div>';
   return head + rControls(A, B) + (!A ? rOverview(pool) : !B ? rZone(pool, A) : rCorridor(pool, A, B));
 }
 function rlistGo(kind) {
@@ -2085,7 +2092,7 @@ document.addEventListener('click', async e => {
     case 'clearq': S.q = ''; qEl.value = ''; render(); return;
     case 'clearjud': S.f[S.hfk || 'judet'].clear(); render(); return;
     case 'rswap': { const x = S.ra; S.ra = S.rb; S.rb = x; S.showAll = {}; render(); return; }
-    case 'rclr': S.ra = null; S.rb = null; S.showAll = {}; render(); return;
+    case 'rclr': S.ra = null; S.rb = null; S.rper = 'tot'; S.rmap = 'inc'; S.rdir = 'din'; S.rinc = new Set(['tinta', 'istoric', 'curent']); S.showAll = {}; render(); return;
     case 'popclose': closePop(); return;
     case 'more': S.limit += 120; render(); return;
     case 'close': closeProfile(); return;
