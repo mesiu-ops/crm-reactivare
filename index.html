@@ -370,6 +370,28 @@ textarea.inp { resize: vertical; min-height: 76px; }
 .fisa .chip.c-amb { background: var(--t-amb-soft); color: var(--t-amb); } .fisa .chip.c-frigo { background: var(--t-ref-soft); color: var(--t-ref); }
 .fisa .sub { display: inline; }
 .recom { font-size: 14.5px; line-height: 1.55; }
+.rec-team { white-space: pre-wrap; overflow-wrap: anywhere; }
+.rec-meta { margin: 8px 0 0; font-size: 12.5px; color: var(--faint); }
+.rec-aviz { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; margin: 12px 0 0; padding: 9px 12px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 13.5px; font-weight: 600; }
+.rec-aviz > span { flex: 1 1 220px; min-width: 0; }
+.rec-aviz > .btn { flex: none; }
+.rec-aviz.soft { background: var(--surface-2); color: var(--muted); font-weight: 500; }
+.recform .rec-aviz { margin: 0; }
+.rec-sub { display: grid; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rec-sub .rec-meta { margin: 0; }
+.rec-lbl { font-size: 13.5px; font-weight: 700; }
+.rec-conf { display: grid; gap: 6px; padding: 10px 12px; border-radius: 9px; background: var(--warn-soft); color: var(--ink); font-size: 13.5px; }
+.rec-conf:empty { display: none; }
+.rec-conf .rec-team { padding: 8px 10px; border-radius: 7px; background: var(--surface); max-height: 220px; overflow-y: auto; font-size: 14px; }
+.rec-orig { margin-top: 12px; border-top: 1px solid var(--line); }
+.rec-orig summary { cursor: pointer; padding: 10px 0 6px; font-size: 13.5px; font-weight: 600; color: var(--muted); }
+.rec-orig[open] summary { padding-bottom: 8px; }
+.recform { display: grid; gap: 10px; }
+.recform textarea.inp { min-height: 150px; }
+.recform .acts, .obs-edit .acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.composer.obs-edit { margin: 0; }
+.timeline .h .ed { color: var(--faint); }
+.link.danger { color: var(--bad); }
 .motiv { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; width: 100%; }
 
 /* pipeline */
@@ -573,6 +595,15 @@ body { margin: 0; }
 .acc-legend { display: grid; gap: 4px; margin: 14px 0 0; font-size: 13px; color: var(--muted); }
 .acc-legend b { color: var(--ink); font-weight: 600; }
 .inp[readonly] { background: var(--surface-2); color: var(--muted); }
+.imp-box { display: grid; gap: 8px; margin-top: 12px; padding: 12px 14px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--line); font-size: 13.5px; }
+.imp-box.warn { background: var(--warn-soft); border-color: transparent; }
+.imp-box.imp-note { grid-template-columns: auto minmax(0, 1fr); align-items: start; gap: 8px; color: var(--ink); }
+.imp-box > b { font-weight: 700; }
+.imp-box ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.imp-box li.bad { color: var(--bad); }
+.imp-box details summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+.imp-box details ul { margin-top: 6px; max-height: 220px; overflow-y: auto; overflow-wrap: anywhere; }
+.imp-box .acts { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 @media (max-width: 520px) { .acc-meta { padding-left: 0; } }
 </style>
 </head>
@@ -762,7 +793,8 @@ function persist() { const f = {}; FKEYS.forEach(k => { f[k] = [...S.f[k]]; }); 
 
 /* ---------- date de lucru ---------- */
 const D = { db: null, user: null, uid: null, mode: 'connecting', canWrite: false, canAdmin: false, isOwner: false,
-  prog: {}, obs: [], cont: [], echipa: null, names: {}, obsBy: {}, contBy: {}, last: {}, obsTxt: {}, dl: null };
+  prog: {}, obs: [], cont: [], echipa: null, names: {}, obsBy: {}, contBy: {}, last: {}, obsTxt: {}, dl: null,
+  fe: {}, feOff: true };   // fe = textele scrise de echipă peste fișă (fisa_edit); feOff = editarea lor nu e disponibilă (doar în versiunea web, după migrarea din 17.10.2026)
 const EMPTY = Object.freeze({});
 const P = r => D.prog[r.id] || EMPTY;
 const etapaOf = r => P(r).etapa || 'neatins';
@@ -770,6 +802,8 @@ const respOf = r => P(r).resp || null;
 // cine modifică o fișă: în versiunea web doar responsabilul ei și adminii (D.mine se setează la login; Matei, 15.10.2026)
 const canEdit = r => !!(r && D.db && D.canWrite && (D.canAdmin || !D.mine || D.mine(r)));
 const NOEDIT = 'Doar responsabilul clientului sau un Admin poate modifica fișa.';
+const NOFISA = 'Fișa nu mai e în CRM: a fost mutată sau scoasă. Copiază ce ai scris, apoi închide fișa.';
+const noEdit = id => toast(id && !BYID.has(id) ? NOFISA : NOEDIT);
 const isLate = r => { const p = P(r); return !!(p.termen && p.termen < TODAY && !['activ', 'pierdut'].includes(etapaOf(r))); };
 function team() {
   const m = Array.isArray(D.echipa) ? D.echipa.filter(x => x && x.k).map(x => ({ k: x.k, n: x.n })) : [];
@@ -788,24 +822,35 @@ function indexWork() {
   }
   for (const k in D.obsBy) D.obsBy[k].sort((a, b) => String(b.data).localeCompare(String(a.data)));
   for (const [id, p] of Object.entries(D.prog)) if (p.upd && (!D.last[id] || p.upd > D.last[id])) D.last[id] = p.upd;
+  for (const [id, f] of Object.entries(D.fe || {})) for (const v of Object.values(f || {})) {   // textele echipei intră în căutare și în „ultima activitate”
+    if (!v) continue;
+    D.obsTxt[id] = (D.obsTxt[id] || '') + ' ' + fold(v.text);
+    if (v.upd && (!D.last[id] || v.upd > D.last[id])) D.last[id] = v.upd;
+  }
   for (const c of D.cont) if (c.cid) (D.contBy[c.cid] = D.contBy[c.cid] || []).push(c);
 }
 const queues = new Map();
 function queued(key, fn) { const prev = queues.get(key) || Promise.resolve(); const next = prev.then(fn, fn); queues.set(key, next.catch(() => {})); return next; }
 let wroteOnce = false;
+// write.last = codul ultimei erori („gone”: rândul a fost șters între timp; „conflict”: altcineva l-a modificat între timp)
 async function write(fn) {
+  write.last = null; write.err = null;
   if (!D.db || !D.canWrite) { toast('Contul tău are acces doar de citire.'); return false; }
-  try { await fn(); wroteOnce = true; return true; }
-  catch (e) {
-    const code = e && e.code;
-    if (code === 'unavailable') { await new Promise(res => setTimeout(res, 500 + Math.random() * 800)); try { await fn(); return true; } catch (e2) { toast('Salvarea n-a reușit. Verifică internetul și încearcă din nou.'); return false; } }
-    if (code === 'invalid_argument') { toast('Nu ai drept pentru această modificare.'); return false; }
-    if (code === 'revoked') { toast('Sesiunea a expirat. Intră din nou în cont.'); return false; }
-    toast('Salvarea n-a reușit: ' + (e.detail || e.message || code || 'eroare')); return false;
+  let e;
+  try { await fn(); wroteOnce = true; return true; } catch (x) { e = x; }
+  if (e && e.code === 'unavailable') {
+    await new Promise(res => setTimeout(res, 500 + Math.random() * 800));
+    try { await fn(); wroteOnce = true; return true; } catch (x) { e = x; }
+    if (e && e.code === 'unavailable') { write.last = 'unavailable'; toast('Salvarea n-a reușit. Verifică internetul și încearcă din nou.'); return false; }
   }
+  const code = (e && e.code) || 'eroare'; write.last = code; write.err = e || null;
+  if (code === 'gone' || code === 'conflict') { toast(e.message); return false; }
+  if (code === 'invalid_argument') { toast('Nu ai drept pentru această modificare.'); return false; }
+  if (code === 'revoked') { toast('Sesiunea a expirat. Intră din nou în cont.'); return false; }
+  toast('Salvarea n-a reușit: ' + (e.detail || e.message || code)); return false;
 }
 function setProg(id, patch) {
-  if (!canEdit(BYID.get(id))) { toast(NOEDIT); return Promise.resolve(false); }   // doar responsabilul sau un Admin
+  if (!canEdit(BYID.get(id))) { noEdit(id); return Promise.resolve(false); }   // doar responsabilul sau un Admin
   const cur = D.prog[id] || {};
   const body = Object.assign({}, cur, patch, { upd: new Date().toISOString(), by: D.uid || null });
   for (const k of Object.keys(body)) if (body[k] === undefined) delete body[k];
@@ -823,9 +868,14 @@ function errCode(e) {
   return c || 'eroare';
 }
 function chk(res) {
-  if (res && res.error) { const err = new Error(res.error.message || 'eroare'); err.code = errCode(res.error); err.detail = res.error.message; throw err; }
+  if (res && res.error) { const err = new Error(res.error.message || 'eroare'); err.code = errCode(res.error); err.detail = res.error.message; err.pg = res.error.code || ''; throw err; }
   return res ? res.data : null;
 }
+const errX = (code, message) => Object.assign(new Error(message), { code });
+// eroare întoarsă chiar de baza de date (cod SQL sau PostgREST): tranzacția s-a anulat sigur. Altfel (rețea, poartă) rezultatul nu e sigur.
+const dbErr = e => /^([0-9A-Z]{5}|PGRST\d+)$/.test(String((e && e.code) || ''));
+// tabela fisa_edit lipsește (supabase_migrare_2026-10-17.sql nerulat) sau nu are drepturi: editarea textelor nu e disponibilă
+const lipsaTabela = e => ['PGRST205', '42P01'].includes(e.pg) || e.code === 'invalid_argument' || /Could not find the table|does not exist/i.test(e.detail || e.message || '');
 async function fetchAll(table, cols, order) {
   const out = [];
   for (let i = 0; ; i += 1000) {
@@ -839,24 +889,75 @@ async function fetchAll(table, cols, order) {
 }
 const LOAD = {
   async progres() { const o = {}; for (const x of await fetchAll('progres')) o[x.client_id] = { etapa: x.etapa, resp: x.resp, pas: x.pas, termen: x.termen, motiv: x.motiv, upd: x.upd, by: x.by }; D.prog = o; },
-  async observatii() { D.obs = (await fetchAll('observatii', '*', 'data')).map(x => ({ id: x.id, cid: x.client_id, autor: x.autor, data: x.data, tip: x.tip, text: x.text })); },
+  async observatii() { D.obs = (await fetchAll('observatii', '*', 'data')).map(x => ({ id: x.id, cid: x.client_id, autor: x.autor, data: x.data, tip: x.tip, text: x.text, editat_la: x.editat_la || null, editat_de: x.editat_de || null })); },
   async contacte() { D.cont = (await fetchAll('contacte', '*', 'data')).map(x => ({ id: x.id, cid: x.client_id, autor: x.autor, data: x.data, nume: x.nume, rol: x.rol, tel: x.tel, email: x.email })); },
+  // textele scrise de echipă peste fișa de cercetare; fără tabelă (migrarea SQL din 17.10.2026 nerulată încă) pagina merge, fără editarea lor.
+  // O eroare trecătoare nu ascunde textele: la prima încărcare oprește pagina, ca la celelalte tabele; după, păstrează ce s-a încărcat.
+  async fisa_edit() {
+    let rows;
+    try { rows = await fetchAll('fisa_edit', 'client_id,camp,text,baza_hash,upd,by'); }
+    catch (e) {
+      if (e.code !== 'revoked' && lipsaTabela(e)) { D.fe = {}; D.feOff = true; feLoaded = true; return; }
+      if (feLoaded && e.code !== 'revoked') return;
+      throw e;
+    }
+    const o = {};
+    for (const x of rows) (o[x.client_id] = o[x.client_id] || {})[x.camp] = { text: x.text, baza_hash: x.baza_hash, upd: x.upd, by: x.by };
+    D.fe = o; D.feOff = false; feLoaded = true; feChannel();
+  },
+  // fișele: alt tab sau alt Admin poate importa între timp (fișe noi, actualizate, mutate sau scoase); se aduce doar ce s-a schimbat
+  async clienti() {
+    if (IMP.busy) return;
+    const rows = await fetchAll('clienti', 'id,actualizat'), acum = new Map(rows.map(x => [x.id, x.actualizat]));
+    const gone = C.filter(r => !acum.has(r.id)).map(r => r.id), changed = rows.filter(x => CL_UPD.get(x.id) !== x.actualizat).map(x => x.id);
+    if (!gone.length && !changed.length) return;
+    const fresh = new Map();
+    for (let i = 0; i < changed.length; i += 100) for (const x of chk(await sb.from('clienti').select('id,data,actualizat').in('id', changed.slice(i, i + 100))) || []) fresh.set(x.id, x);
+    let gen = RAW.generat;
+    if (changed.length) { const st = chk(await sb.from('setari').select('k,v')) || []; RUTE = (st.find(x => x.k === 'rute') || {}).v || RUTE; gen = (st.find(x => x.k === 'generat') || {}).v || gen; }
+    if (IMP.busy) return;
+    for (const id of gone) CL_UPD.delete(id);
+    for (const x of fresh.values()) CL_UPD.set(x.id, x.actualizat);
+    prepData(C.filter(r => acum.has(r.id) && !fresh.has(r.id)).concat([...fresh.values()].map(x => x.data)), gen);
+    if (S.open && !BYID.has(S.open)) await fisaPlecata(S.open);
+  },
   async echipa() { D.echipa = (await fetchAll('echipa', '*', 'ordine')).map(x => ({ k: x.k, n: x.n })); },
   async membri() {
     D.membri = await fetchAll('membri', 'user_id,email,nume,rol,echipa_k', 'nume'); D.names = Object.fromEntries(D.membri.map(x => [x.user_id, x.nume]));
     if (D.canAdmin) { const r = await sb.rpc('admin_conturi'); D.conturi = r.error ? null : r.data || []; }   // fără funcție în bază → pagina arată doar rolurile
   },
 };
+let feLoaded = false, CL_UPD = new Map();   // CL_UPD: id → „actualizat”, ca să știm ce fișe s-au schimbat de la ultima încărcare
+function clientiRows(rows) { CL_UPD = new Map(rows.map(x => [x.id, x.actualizat])); return rows.map(x => x.data); }
+// fișa deschisă a fost mutată (migrare) sau scoasă între timp: o închidem sau deschidem fișa nouă, fără să pierdem un text nescris
+async function fisaPlecata(id) {
+  let succ = null;
+  if (D.canAdmin) { try { const r = await sb.from('migrari_log').select('nou').eq('vechi', id).order('la', { ascending: false }).limit(1); succ = r.data && r.data[0] && r.data[0].nou; } catch (e) { /* */ } }
+  if (S.open !== id) return;
+  const unde = succ && BYID.get(succ), cum = unde ? `Fișa s-a mutat pe ${unde.nume}` : 'Fișa nu mai e în CRM: a fost mutată sau scoasă la o actualizare';
+  const draft = [...document.querySelectorAll('.drawer textarea, .drawer input')].some(x => x.type !== 'checkbox' && x.value.trim() && x.value !== x.defaultValue);
+  if (draft) { toast(cum + '. Copiază textul nesalvat, apoi închide fișa: aici nu se mai poate salva.'); return; }
+  if (unde) { openProfile(unde.id); toast(cum + '. Datele echipei sunt aici.'); } else { closeProfile(); toast(cum + '.'); }
+}
 const reloadT = {};
 function reload(t) {
   clearTimeout(reloadT[t]);
   reloadT[t] = setTimeout(async () => { try { await LOAD[t](); indexWork(); schedule(true); } catch (e) { if (e.code === 'revoked') toast('Sesiunea a expirat. Intră din nou în cont.'); } }, 250);
 }
+// canal separat pentru fisa_edit, deschis doar când tabela există: o tabelă lipsă nu strică actualizările celorlalte
+let feCh = null;
+function feChannel() {
+  if (feCh || D.feOff || !sb || !started) return;
+  feCh = sb.channel('crm-reactivare-fe').on('postgres_changes', { event: '*', schema: 'public', table: 'fisa_edit' }, () => reload('fisa_edit')).subscribe(() => {});
+}
 const unknownOp = () => Object.assign(new Error('Operație necunoscută'), { code: 'invalid_argument' });
+const noRight = () => Object.assign(new Error('Fără drept de modificare'), { code: 'invalid_argument' });
+const feConflict = row => Object.assign(errX('conflict', 'Între timp, textul echipei a fost modificat. Textul tău e încă în câmp.'), { row: row || null });
+const feKey = id => { const i = id.lastIndexOf('|'); return [id.slice(0, i), id.slice(i + 1)]; };   // „<client_id>|<camp>”
 // adaptor: aceeași formă de apel ca baza de date a paginii claude.ai, ca restul aplicației să rămână neschimbat
 const DBX = {
   doc(path) {
-    const [col, id] = path.split('/');
+    const i = path.indexOf('/'), col = path.slice(0, i), id = path.slice(i + 1);
     return {
       async set(body) {
         if (col === 'progres') {
@@ -870,10 +971,54 @@ const DBX = {
           if (del.length) chk(await sb.from('echipa').delete().in('k', del));
           reload('echipa'); return;
         }
+        if (col === 'fisa_edit') {   // cine și când le completează baza de date
+          const [cid, camp] = feKey(id), row = { text: body.text, baza_hash: body.baza_hash || null };
+          const acum = async () => (chk(await sb.from('fisa_edit').select('text,baza_hash,upd,by').eq('client_id', cid).eq('camp', camp)) || [])[0] || null;
+          // upd_baza = data versiunii pe care a pornit editarea (null = nu exista text): nu acoperim în tăcere ce a scris altcineva între timp
+          let d;
+          if (body.upd_baza === undefined) d = chk(await sb.from('fisa_edit').upsert(Object.assign({ client_id: cid, camp }, row), { onConflict: 'client_id,camp' }).select('upd'));
+          else if (body.upd_baza === null) {
+            const r = await sb.from('fisa_edit').insert(Object.assign({ client_id: cid, camp }, row)).select('upd');
+            if (r.error && (r.error.code === '23505' || /duplicate key/i.test(r.error.message || ''))) throw feConflict(await acum());
+            d = chk(r);
+          } else {
+            d = chk(await sb.from('fisa_edit').update(row).eq('client_id', cid).eq('camp', camp).eq('upd', body.upd_baza).select('upd'));
+            if (!d || !d.length) { const x = await acum(); throw x && x.upd === body.upd_baza ? noRight() : feConflict(x); }
+          }
+          reload('fisa_edit'); return { upd: d && d[0] ? d[0].upd : null };
+        }
+        throw unknownOp();
+      },
+      async update(patch) {
+        if (col === 'observatii') {   // autorul, data și fișa notei rămân neschimbate (le păzește și baza de date)
+          let q = sb.from('observatii').update({ tip: patch.tip, text: patch.text }).eq('id', id);
+          if (patch.editat_baza !== undefined) q = patch.editat_baza === null ? q.is('editat_la', null) : q.eq('editat_la', patch.editat_baza);   // versiunea pe care a pornit editarea
+          const d = chk(await q.select('id,editat_la'));
+          if (!d || !d.length) {   // nimic modificat: nota a fost ștearsă, a editat-o altcineva între timp sau regulile bazei de date n-au lăsat
+            const now = chk(await sb.from('observatii').select('id,tip,text,editat_la,editat_de').eq('id', id)) || [];
+            if (!now.length) throw errX('gone', 'Nota a fost ștearsă între timp. Textul tău e încă în câmp: copiază-l într-o notă nouă.');
+            if (patch.editat_baza !== undefined && (now[0].editat_la || null) !== patch.editat_baza) throw Object.assign(errX('conflict', 'Între timp, nota a fost modificată. Textul tău e încă în câmp.'), { row: now[0] });
+            throw noRight();
+          }
+          reload('observatii'); return { editat_la: d[0].editat_la || null };
+        }
         throw unknownOp();
       },
       async delete() {
-        if (col === 'observatii' || col === 'contacte') { chk(await sb.from(col).delete().eq('id', id)); reload(col); return; }
+        if (col === 'observatii' || col === 'contacte') {
+          const d = chk(await sb.from(col).delete().eq('id', id).select('id'));
+          if (!d || !d.length) { const now = chk(await sb.from(col).select('id').eq('id', id)) || []; if (now.length) throw noRight(); }   // altfel era deja ștearsă
+          reload(col); return;
+        }
+        if (col === 'fisa_edit') {   // textul echipei trece în istoric (fisa_edit_istoric); fișa arată din nou textul din cercetare
+          const [cid, camp] = feKey(id);
+          const d = chk(await sb.from('fisa_edit').delete().eq('client_id', cid).eq('camp', camp).select('client_id'));
+          if (!d || !d.length) {   // nimic șters: fie l-a scos deja altcineva, fie nu e voie
+            const still = chk(await sb.from('fisa_edit').select('client_id').eq('client_id', cid).eq('camp', camp));
+            if (still && still.length) throw noRight();
+          }
+          reload('fisa_edit'); return;
+        }
         throw unknownOp();
       },
     };
@@ -891,9 +1036,9 @@ const DBX = {
   },
 };
 const DL = {
-  async save({ filename, data }) {
+  async save({ filename, data, type }) {
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([data], { type: 'text/csv;charset=utf-8' }));
+    a.href = URL.createObjectURL(new Blob([data], { type: type || 'text/csv;charset=utf-8' }));
     a.download = filename; document.body.appendChild(a); a.click();
     setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500);
     return { status: 'saved' };
@@ -946,11 +1091,11 @@ async function start(user) {
     ME = { id: user.id, email: user.email, nume: me.nume, rol: me.rol, k: me.echipa_k };
     Object.assign(D, { db: DBX, dl: me.rol === 'admin' ? DL : null, uid: user.id, isOwner: me.rol === 'admin', canAdmin: me.rol === 'admin', canWrite: me.rol !== 'citire', mode: 'live' });
     D.mine = me.rol === 'admin' ? null : (r => !!ME.k && respOf(r) === ME.k);   // membrii modifică doar fișele alocate lor
-    const [rows, setari] = await Promise.all([fetchAll('clienti', 'id,data'), sb.from('setari').select('k,v')]);
+    const [rows, setari] = await Promise.all([fetchAll('clienti', 'id,data,actualizat'), sb.from('setari').select('k,v')]);
     const st = chk(setari) || [];
     RUTE = (st.find(x => x.k === 'rute') || {}).v || null;   // localități + culoare din istoricul TMS (16.10.2026)
-    prepData(rows.map(x => x.data), (st.find(x => x.k === 'generat') || {}).v || null);
-    await Promise.all([LOAD.progres(), LOAD.observatii(), LOAD.contacte(), LOAD.echipa(), LOAD.membri()]);
+    prepData(clientiRows(rows), (st.find(x => x.k === 'generat') || {}).v || null);
+    await Promise.all([LOAD.progres(), LOAD.observatii(), LOAD.contacte(), LOAD.fisa_edit(), LOAD.echipa(), LOAD.membri()]);
     indexWork();
     if (!S.me && ME.k) { S.me = ME.k; LS.set('me', S.me); }
     if (!started) {
@@ -958,7 +1103,10 @@ async function start(user) {
       let ch = sb.channel('crm-reactivare');
       for (const t of ['progres', 'observatii', 'contacte', 'echipa', 'membri']) ch = ch.on('postgres_changes', { event: '*', schema: 'public', table: t }, () => reload(t));
       ch.subscribe(st => { if (st === 'SUBSCRIBED') D.mode = 'live'; else if (st === 'CHANNEL_ERROR' || st === 'TIMED_OUT') D.mode = 'offline'; setSync(); });
-      window.addEventListener('focus', () => { for (const t of ['progres', 'observatii', 'contacte']) reload(t); });
+      feChannel();
+      // fișele nu vin în timp real (sunt mari): se verifică la revenirea în pagină și la 5 minute, ca un tab vechi să nu scrie pe fișe mutate
+      window.addEventListener('focus', () => { for (const t of ['clienti', 'progres', 'observatii', 'contacte', 'fisa_edit']) reload(t); });
+      setInterval(() => { if (document.visibilityState === 'visible') reload('clienti'); }, 5 * 60e3);
     }
     showGate(null);
     if (!C.length && D.canAdmin) S.tab = 'echipa';
@@ -1011,9 +1159,11 @@ function viewEchipa() {
       <div class="acc-legend">${['admin', 'membru', 'citire'].map(r => `<span><b>${ROL_N[r]}</b>: ${r === 'citire' ? ROL_CAN[r] : 'vede tot, ' + ROL_CAN[r]}.</span>`).join('')}</div>
       <p class="note">Cont nou: pasul 1, îl creezi în Supabase → Authentication → Users → Add user (e-mail și parolă, cu „Auto Confirm User” bifat); pasul 2, îi dai acces aici. Fără pasul 2, contul nu vede nimic. Ca să schimbi rolul sau lista cuiva, apasă „modifică”.</p></div>
     <div class="card"><header><h3>${ico('dl')}Fișele de cercetare</h3></header>
-      <p class="muted" style="margin:0 0 12px">${C.length ? `${C.length} fișe încărcate, cercetare din ${fmtDate(RAW.generat)}.` : 'Nicio fișă încărcată încă.'} Încarcă fișierul <span class="mono">crm-date-import.json</span> ca să adaugi sau să actualizezi fișele. Etapele, notele, contactele și alocările existente nu se modifică.</p>
-      <form id="importform" style="display:grid;gap:10px"><input class="inp" id="imp-file" type="file" accept=".json,application/json" aria-label="Fișierul de import">
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn pri sm">Încarcă fișele</button><span class="muted" id="imp-st" style="font-size:13px" role="status"></span></div></form></div>
+      <p class="muted" style="margin:0 0 12px">${C.length ? `${cate(C.length, 'fișă încărcată', 'fișe încărcate')}, cercetare din ${fmtDate(RAW.generat)}.` : 'Nicio fișă încărcată încă.'} Încarcă fișierul <span class="mono">crm-date-import.json</span> ca să adaugi sau să actualizezi fișele. Etapele, notele, contactele, alocările și textele scrise de echipă nu se modifică.</p>
+      ${D.feOff ? `<div class="imp-box warn imp-note" style="margin:0 0 12px">${ico('alert')}<span>Baza de date nu are încă tabelele din 17.10.2026: editarea notelor și a recomandării, istoricul și mutarea datelor echipei la schimbarea fișelor. Rulează <span class="mono">supabase_migrare_2026-10-17.sql</span> în Supabase → SQL Editor.</span></div>` : ''}
+      <form id="importform" style="display:grid;gap:10px"><input class="inp" id="imp-file" type="file" accept=".json,application/json" aria-label="Fișierul de import"${IMP.busy ? ' disabled' : ''}>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn pri sm"${IMP.busy || IMP.plan ? ' disabled' : ''}>Încarcă fișele</button><span class="muted" id="imp-st" style="font-size:13px" role="status">${esc(IMP.st)}</span></div></form>
+      ${impPlanHTML()}${impRepHTML()}</div>
   </section>`;
 }
 function pwdHTML() {
@@ -1022,29 +1172,178 @@ function pwdHTML() {
     <label class="field">Repetă parola<input class="inp" id="pw2" type="password" autocomplete="new-password"></label>
     <button class="btn pri sm">Salvează parola</button><span class="err" id="pw-err"></span></form>`;
 }
-async function runImport(file) {
-  const st = $('#imp-st'), say = t => { if (st) st.textContent = t; };
-  let j;
-  try { j = JSON.parse(await file.text()); } catch (e) { say('Fișierul nu e un JSON valid.'); return; }
-  if (!j || !Array.isArray(j.clienti) || !j.clienti.length || !j.clienti.every(r => r && r.id && r.fisa)) { say('Fișierul nu conține fișe de clienți în formatul așteptat.'); return; }
+/* ---------- import: fișele noi, apoi consolidarea cu datele echipei (regulile: build/MIGRARI.md) ---------- */
+// Ce scrie echipa (progres, observatii, contacte, fisa_edit) nu se suprascrie niciodată. Pachetul poate avea în plus
+// „migrare”: {"id vechi": "id nou"} (datele echipei se mută pe fișa nouă, apoi fișa veche se scoate) și
+// „sterse”: ["id"] (fișe scoase fără succesor; cele cu date ale echipei rămân, le refuză baza de date).
+const IMP = { st: '', plan: null, rep: null, busy: false };
+const MIG_LIPSA = 'Baza de date nu are încă funcțiile de consolidare. Rulează întâi supabase_migrare_2026-10-17.sql în Supabase → SQL Editor, apoi încearcă din nou.';
+function impSay(t) { IMP.st = t || ''; const el = $('#imp-st'); if (el) el.textContent = IMP.st; }
+const stamp = () => { const d = new Date(); return localDay(d) + '-' + pad(d.getHours()) + pad(d.getMinutes()); };
+const scurt = (s, n = 140) => { s = String(s ?? ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
+const saveJSON = (filename, obj) => DL.save({ filename, data: JSON.stringify(obj, null, 1), type: 'application/json;charset=utf-8' });
+async function backupEchipa() {   // etape, note, contacte, textele echipei; doar pentru Admin (date_echipa_export)
+  const r = await sb.rpc('date_echipa_export');
+  if (r.error) {
+    const lipsa = ['PGRST202', '42883'].includes(r.error.code) || /could not find the function|schema cache/i.test(r.error.message || '');
+    throw Object.assign(new Error(lipsa ? MIG_LIPSA : 'Copia de siguranță n-a reușit: ' + r.error.message), { code: errCode(r.error) });
+  }
+  return r.data;
+}
+// (1) verificarea pachetului, înainte de orice scriere
+function importPlan(j) {
+  const BAD = 'Fișierul nu conține fișe de clienți în formatul așteptat.';
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return { err: BAD };
+  if (j.migrare != null && (typeof j.migrare !== 'object' || Array.isArray(j.migrare))) return { err: '„migrare” trebuie să aibă forma {"id vechi": "id nou"}.' };
+  if (j.sterse != null && !Array.isArray(j.sterse)) return { err: '„sterse” trebuie să fie o listă de id-uri.' };
+  const cl = Array.isArray(j.clienti) ? j.clienti : null;
+  const M = new Map(Object.entries(j.migrare || {}).filter(([k]) => !k.startsWith('_')).map(([v, n]) => [String(v).trim(), String(n ?? '').trim()]));
+  const sterse = [...new Set((j.sterse || []).map(x => String(x).trim()).filter(Boolean))];
+  if (!cl || !cl.every(r => r && r.id && r.fisa) || (!cl.length && !M.size && !sterse.length)) return { err: BAD };
+  const noi = new Set(cl.map(r => String(r.id))), errs = [];
+  const capat = v => { const seen = new Set([v]); let x = M.get(v); while (M.has(x)) { if (seen.has(x)) return null; seen.add(x); x = M.get(x); } return x; };   // A→B, B→C ⇒ A→C
+  const mig = [];
+  for (const v of M.keys()) {
+    const n = capat(v);
+    if (!v || n == null || !n || n === v) { errs.push(`Migrarea fișei „${v}” nu duce la o fișă nouă validă.`); continue; }
+    if (noi.has(v)) errs.push(`Fișa ${v} e și printre fișele noi, și în „migrare” ca fișă veche.`);
+    if (!noi.has(n) && !BYID.has(n)) errs.push(`Fișa nouă ${n} (pentru ${v}) nu e nici în pachet, nici în CRM.`);
+    mig.push([v, n]);
+  }
+  const tinte = new Set(mig.map(x => x[1]));
+  for (const id of sterse) {
+    if (noi.has(id)) errs.push(`Fișa ${id} e și printre fișele noi, și în „sterse”.`);
+    if (M.has(id)) errs.push(`Fișa ${id} e și în „migrare”, și în „sterse”.`);
+    else if (tinte.has(id)) errs.push(`Fișa ${id} e fișă nouă în „migrare” și e și în „sterse”.`);
+  }
+  if (errs.length) return { err: 'Pachetul nu s-a încărcat: ' + errs.slice(0, 5).join(' ') + (errs.length > 5 ? ` Încă ${errs.length - 5} probleme.` : '') };
+  return { pkg: j, n: cl.length, mig, sterse, nume: Object.fromEntries(cl.map(r => [String(r.id), r.nume || ''])) };
+}
+// (2)–(6): copia de siguranță, fișele, migrările, ștergerile, setările, apoi reîncărcarea; întoarce raportul.
+// opts.descarca: copia făcută chiar înainte de mutări se descarcă singură (importul pornit din pagină).
+const NESIGUR = 'Conexiunea s-a întrerupt; rezultatul ultimei operații nu e sigur. Încarcă din nou același fișier: e sigur, nimic nu se mută de două ori.';
+async function importExec(plan, say, opts = {}) {
+  const j = plan.pkg, rep = { fise: 0, total: null, migrari: [], sterse: { facute: [], pastrate: [], lipsa: [] }, progres_seed: 0, erori: [], backup: null, backupLa: '', backupDescarcat: false, oprit: null };
   try {
+    if (plan.mig.length || plan.sterse.length) {   // înainte de orice scriere; verifică și că funcțiile de consolidare există
+      say('Se face copia de siguranță a datelor echipei…');
+      rep.backup = await backupEchipa(); rep.backupLa = stamp();
+      if (opts.descarca) { try { await saveJSON(`crm-date-echipa-inainte-de-import-${rep.backupLa}.json`, rep.backup); rep.backupDescarcat = true; } catch (e) { /* rămâne butonul din raport */ } }
+    }
     const now = new Date().toISOString();
     for (let i = 0; i < j.clienti.length; i += 40) {
       say(`Se încarcă fișele: ${i} din ${j.clienti.length}…`);
       chk(await sb.from('clienti').upsert(j.clienti.slice(i, i + 40).map(r => ({ id: r.id, data: r, actualizat: now }))));
+      rep.fise = Math.min(i + 40, j.clienti.length);
     }
+    // o eroare a bazei de date anulează sigur migrarea (fișa veche rămâne neatinsă); una de rețea nu spune ce s-a întâmplat: ne oprim
+    const stop = e => { if (errCode(e) === 'revoked') throw new Error('Sesiunea a expirat. Intră din nou în cont și încarcă din nou același fișier: e sigur.'); if (!dbErr(e)) throw new Error(NESIGUR); };
+    for (const [k, [v, n]] of plan.mig.entries()) {
+      say(`Se mută datele echipei pe fișele noi: ${k + 1} din ${plan.mig.length}…`);
+      const r = await sb.rpc('migrare_client', { p_vechi: v, p_nou: n, p_sterge_vechi: true });
+      if (r.error) stop(r.error);
+      rep.migrari.push(r.error ? { vechi: v, nou: n, eroare: r.error.message } : Object.assign({ vechi: v, nou: n }, r.data || {}));
+    }
+    for (const [k, id] of plan.sterse.entries()) {
+      say(`Se scot fișele: ${k + 1} din ${plan.sterse.length}…`);
+      const r = await sb.from('clienti').delete().eq('id', id).select('id');   // câte una: baza de date refuză fișele cu date ale echipei
+      if (r.error) stop(r.error);
+      if (r.error && /date ale echipei/i.test(r.error.message || '')) rep.sterse.pastrate.push({ id, motiv: r.error.message });
+      else if (r.error) rep.erori.push(`Fișa ${id} nu s-a scos: ${r.error.message}`);
+      else if (!(r.data || []).length) rep.sterse.lipsa.push(id);
+      else rep.sterse.facute.push(id);
+    }
+    say('Se salvează setările și alocările inițiale…');
     if (j.generat) chk(await sb.from('setari').upsert({ k: 'generat', v: j.generat }));
     if (j.rute) { chk(await sb.from('setari').upsert({ k: 'rute', v: j.rute })); RUTE = j.rute; }
     if (Array.isArray(j.echipa) && !(D.echipa || []).length) chk(await sb.from('echipa').upsert(j.echipa.map((m, i) => ({ k: m.k, n: m.n, ordine: i }))));
-    const prog = Object.entries(j.progres || {});
-    for (let i = 0; i < prog.length; i += 200) {
+    // alocările inițiale doar pe fișele care sunt acum în CRM: fișele mutate sau scoase nu primesc rânduri noi (baza de date le-ar refuza)
+    const exista = new Set((await fetchAll('clienti', 'id')).map(x => x.id)), skip = new Set([...plan.mig.map(x => x[0]), ...plan.sterse]);
+    const prog = Object.entries(j.progres || {}).filter(([id]) => exista.has(id) && !skip.has(id));
+    for (let i = 0; i < prog.length; i += 200) {   // doar unde nu există încă un rând: progresul echipei nu se suprascrie niciodată
       chk(await sb.from('progres').upsert(prog.slice(i, i + 200).map(([id, p]) => ({ client_id: id, etapa: p.etapa || 'neatins', resp: p.resp || null, by: ME.id })), { onConflict: 'client_id', ignoreDuplicates: true }));
     }
-    const rows = await fetchAll('clienti', 'id,data');
-    prepData(rows.map(x => x.data), j.generat || RAW.generat);
-    await Promise.all([LOAD.progres(), LOAD.echipa()]); indexWork();
-    say(`Gata: ${j.clienti.length} fișe încărcate.`); toast('Fișele au fost încărcate.'); render();
-  } catch (e) { say('Importul s-a oprit: ' + (e.detail || e.message)); }
+    rep.progres_seed = prog.length;
+  } catch (e) { rep.oprit = e.detail || e.message || 'eroare'; }
+  try {
+    say('Se reîncarcă CRM-ul…');
+    prepData(clientiRows(await fetchAll('clienti', 'id,data,actualizat')), j.generat || RAW.generat);
+    await Promise.all([LOAD.progres(), LOAD.observatii(), LOAD.contacte(), LOAD.fisa_edit(), LOAD.echipa()]);
+    indexWork(); rep.total = C.length;
+  } catch (e) { if (!rep.oprit) rep.oprit = 'Fișele s-au încărcat, dar reîncărcarea paginii n-a reușit: ' + (e.detail || e.message) + '. Reîncarcă pagina.'; }
+  return rep;
+}
+async function runImport(file) {
+  if (IMP.busy) return;
+  IMP.plan = null; IMP.rep = null;
+  let j;
+  try { j = JSON.parse(await file.text()); } catch (e) { impSay('Fișierul nu e un JSON valid.'); render(); return; }
+  const plan = importPlan(j);
+  if (plan.err) { impSay(plan.err); render(); return; }
+  if (plan.mig.length || plan.sterse.length) {   // migrări sau ștergeri: întâi confirmarea în pagină, cu copia de siguranță la îndemână
+    impSay('Se verifică baza de date…');
+    try { await backupEchipa(); } catch (e) { impSay(e.message); render(); return; }
+    IMP.plan = plan; impSay('Confirmă mai jos ce se întâmplă cu datele echipei.'); render(); return;
+  }
+  await importGo(plan);
+}
+async function importGo(plan) {
+  IMP.busy = true; IMP.plan = null; IMP.rep = null; render();
+  const rep = await importExec(plan, impSay, { descarca: true });
+  IMP.busy = false; IMP.rep = rep;
+  impSay(rep.oprit ? 'Importul s-a oprit. Vezi raportul de mai jos.' : `Gata: ${cate(rep.fise, 'fișă încărcată', 'fișe încărcate')}.`);
+  toast(rep.oprit ? 'Importul s-a oprit.' : 'Fișele au fost încărcate.'); render();
+}
+// același import, pe un obiect deja citit (importurile făcute de Claude din browser); doar Admin.
+// Cu migrări sau ștergeri cere { confirma: true }; fără, întoarce doar planul și nu scrie nimic.
+window.crmImport = async (pkg, opts = {}) => {
+  if (!sb || !ME || !D.canAdmin) throw new Error('Doar un Admin poate încărca fișe.');
+  if (IMP.busy) throw new Error('Un import e deja în curs.');
+  const plan = importPlan(typeof pkg === 'string' ? JSON.parse(pkg) : pkg);
+  if (plan.err) return { ok: false, eroare: plan.err };
+  if ((plan.mig.length || plan.sterse.length) && opts.confirma !== true) {
+    await backupEchipa();   // aruncă eroare clară dacă migrarea SQL nu e rulată
+    return { ok: false, confirmare: 'necesară: crmImport(pachet, { confirma: true })', plan: { fise: plan.n, migrare: plan.mig, sterse: plan.sterse } };
+  }
+  IMP.busy = true; IMP.plan = null; render();
+  try {
+    const rep = await importExec(plan, typeof opts.say === 'function' ? opts.say : impSay, { descarca: opts.descarca === true }); IMP.rep = rep;
+    const b = rep.backup;   // copia întreagă rămâne în pagină (butonul din raport); aici doar câte rânduri are, ca datele echipei să nu iasă din pagină
+    return Object.assign({ ok: !rep.oprit }, rep, { backup: b ? { generat: b.generat, progres: (b.progres || []).length, observatii: (b.observatii || []).length, contacte: (b.contacte || []).length, fisa_edit: (b.fisa_edit || []).length } : null });
+  }
+  finally { IMP.busy = false; render(); }
+};
+const CAMP_N = { resp: 'responsabil', etapa: 'etapă', pas: 'pas', termen: 'termen', motiv: 'motiv', 'fisa_edit.recomandare': 'recomandarea echipei' };
+function impPlanHTML() {
+  const p = IMP.plan; if (!p) return '';
+  const nm = id => { const n = p.nume[id] || (BYID.get(id) || {}).nume; return n ? `${esc(n)} <span class="faint mono">${esc(id)}</span>` : `<span class="mono">${esc(id)}</span>`; };
+  return `<div class="imp-box warn" role="group" aria-label="Confirmarea importului"><b>Pachetul schimbă fișe care pot avea date ale echipei</b>
+    <ul>${p.n ? `<li>${cate(p.n, 'fișă se încarcă', 'fișe se încarcă', true)} sau se actualizează.</li>` : ''}
+      ${p.mig.length ? `<li>${cate(p.mig.length, 'fișă își schimbă', 'fișe își schimbă', true)} id-ul: etapele, notele, contactele și textele echipei se mută pe fișa nouă, apoi fișa veche se scoate.</li>` : ''}
+      ${p.sterse.length ? `<li>${cate(p.sterse.length, 'fișă se scoate', 'fișe se scot', true)} din CRM. Cele care au date ale echipei rămân și apar în raport.</li>` : ''}</ul>
+    <details><summary>Vezi fișele</summary><ul>${p.mig.map(([v, n]) => `<li>${nm(v)} → ${nm(n)}</li>`).join('')}${p.sterse.map(id => `<li>Se scoate: ${nm(id)}</li>`).join('')}</ul></details>
+    <p style="margin:0">Înainte, descarcă o copie a datelor echipei (etape, note, contacte, texte). Importul mai face una chiar înainte de mutări și o descarcă singur.</p>
+    <div class="acts"><button class="btn sm" data-act="impbackup">${ico('dl')}Descarcă copia de siguranță</button><button class="btn pri sm" data-act="impgo">${ico('check')}Continuă importul</button><button class="link" data-act="impcancel">Renunță</button></div></div>`;
+}
+function impRepHTML() {
+  const r = IMP.rep; if (!r) return '';
+  const ok = r.migrari.filter(x => !x.eroare), bad = r.migrari.filter(x => x.eroare), s = k => ok.reduce((n, x) => n + (+x[k] || 0), 0);
+  const conf = ok.flatMap(x => (x.conflicte || []).map(c => Object.assign({ vechi: x.vechi, nou: x.nou }, c)));
+  const nm = id => esc((BYID.get(id) || {}).nume || id);
+  const val = (camp, v) => camp === 'resp' ? teamName(v) : camp === 'etapa' ? (ETAPA_N[v] || v) : camp === 'termen' ? fmtDate(v) : scurt(v);
+  const L = [`<li>Fișe încărcate: <b>${fmtInt(r.fise)}</b>${r.total != null ? ` · în CRM acum: ${fmtInt(r.total)}` : ''}.</li>`];
+  if (r.migrari.length) L.push(`<li>Date mutate de pe ${cate(ok.length, 'fișă veche', 'fișe vechi', true)}: ${cate(s('observatii'), 'notă', 'note')}, ${cate(s('contacte'), 'contact', 'contacte')}, ${cate(s('fisa_edit'), 'text al echipei', 'texte ale echipei')}; etape și alocări — mutate: ${ok.filter(x => x.progres === 'mutat').length}, unite cu cele de pe fișa nouă: ${ok.filter(x => x.progres === 'consolidat').length}.</li>`);
+  if (bad.length) L.push(`<li class="bad">Nemutate (baza de date a anulat mutarea, fișa veche a rămas neatinsă): ${bad.map(x => `${nm(x.vechi)} → ${nm(x.nou)}: ${esc(x.eroare)}`).join('; ')}</li>`);
+  if (conf.length) L.push(`<li>De verificat, valori diferite pe cele două fișe (cea renunțată rămâne în jurnalul migrărilor): ${conf.map(c => `${nm(c.nou)} · ${esc(CAMP_N[c.camp] || c.camp)}: păstrat „${esc(val(c.camp, c.pastrat))}”, renunțat „${esc(val(c.camp, c.renuntat))}”`).join('; ')}</li>`);
+  if (r.sterse.facute.length) L.push(`<li>Scoase din CRM: <b>${r.sterse.facute.length}</b>.</li>`);
+  if (r.sterse.pastrate.length) L.push(`<li class="bad">Păstrate, au date ale echipei: ${r.sterse.pastrate.map(x => nm(x.id)).join(', ')}. Mută-le datele cu „migrare” sau lasă-le în CRM.</li>`);
+  if (r.sterse.lipsa.length) L.push(`<li>Nu mai erau în CRM: ${r.sterse.lipsa.map(esc).join(', ')}.</li>`);
+  for (const x of r.erori) L.push(`<li class="bad">${esc(x)}</li>`);
+  if (r.oprit) L.push(`<li class="bad">Importul s-a oprit: ${esc(r.oprit)} Ce s-a făcut până aici rămâne; poți încărca din nou același fișier.</li>`);
+  const warn = r.oprit || bad.length || conf.length || r.sterse.pastrate.length || r.erori.length;
+  if (r.backup) L.push(`<li>Copia datelor echipei de dinainte de mutări${r.backupDescarcat ? ` s-a descărcat: <span class="mono">crm-date-echipa-inainte-de-import-${esc(r.backupLa)}.json</span>` : ' nu s-a descărcat singură. Descarc-o de mai jos'}.</li>`);
+  return `<div class="imp-box${warn ? ' warn' : ''}" role="status"><b>Raportul importului</b><ul>${L.join('')}</ul>
+    ${r.backup ? `<div class="acts"><button class="btn sm" data-act="impbackupmem">${ico('dl')}Descarcă ${r.backupDescarcat ? 'din nou ' : ''}copia făcută înainte de mutări</button></div>` : ''}</div>`;
 }
 document.addEventListener('submit', async e => {
   const f = e.target;
@@ -1081,7 +1380,8 @@ document.addEventListener('submit', async e => {
   }
   if (f.id === 'importform') {
     e.preventDefault();
-    const fl = $('#imp-file').files[0]; if (!fl) { $('#imp-st').textContent = 'Alege întâi fișierul.'; return; }
+    const fl = $('#imp-file').files[0]; if (!fl) { impSay('Alege întâi fișierul.'); return; }
+    if (IMP.busy || IMP.plan) return;
     await runImport(fl);
   }
 });
@@ -1093,9 +1393,21 @@ function accFill(m) {   // formularul de acces: gol = cont nou; cu un membru = m
   if (m) { $('#accform').scrollIntoView({ block: 'center', behavior: 'smooth' }); $('#ac-nume').focus(); }
 }
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-act="logout"], [data-act="reload"], [data-rmacc], [data-editacc], [data-grantacc], #ac-cancel');
+  const t = e.target.closest('[data-act="logout"], [data-act="reload"], [data-act^="imp"], [data-rmacc], [data-editacc], [data-grantacc], #ac-cancel');
   if (!t) return;
   if (t.id === 'ac-cancel') { accFill(null); return; }
+  if (t.dataset.act === 'impcancel') { IMP.plan = null; impSay('Importul a fost anulat. Nu s-a modificat nimic.'); render(); return; }
+  if (t.dataset.act === 'impgo') { if (IMP.plan && !IMP.busy && D.canAdmin) await importGo(IMP.plan); return; }
+  if (t.dataset.act === 'impbackup' || t.dataset.act === 'impbackupmem') {
+    if (!D.canAdmin) return;
+    t.disabled = true;
+    try {
+      if (t.dataset.act === 'impbackupmem' && IMP.rep && IMP.rep.backup) await saveJSON(`crm-date-echipa-inainte-de-import-${IMP.rep.backupLa}.json`, IMP.rep.backup);
+      else await saveJSON(`crm-date-echipa-${stamp()}.json`, await backupEchipa());
+      toast('Copia de siguranță a fost descărcată.');
+    } catch (x) { impSay(x.message); toast('Copia de siguranță n-a reușit.'); }
+    t.disabled = false; return;
+  }
   if (t.dataset.editacc) { accFill((D.membri || []).find(m => m.user_id === t.dataset.editacc)); return; }
   if (t.dataset.grantacc) { accFill(null); $('#ac-email').value = t.dataset.grantacc; $('#ac-nume').focus(); $('#accform').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
   if (t.dataset.act === 'reload') { location.reload(); return; }
@@ -1834,15 +2146,135 @@ function viewEchipaBase() {
         <div class="grid g2" style="gap:12px">${[[nf, 'fișe de cercetare'], [n.tinta, 'ținte'], [nt, 'clienți adăugați din istoricul TMS'], [nh, 'clienți cu curse 2017–2026']].map(([v, l]) => `<div><div class="num" style="font-family:var(--f-display);font-weight:800;font-size:24px">${v}</div><div class="muted" style="font-size:13px">${l}</div></div>`).join('')}</div>
         <p class="note">Fișele vin din „Reactivare Domestic”, „Reactivare Domestic — Val 2”, „Val 3” (clienții noi din TMS) și „Analiza Clienți Ioan” (cercetare încheiată la ${fmtDate(RAW.generat)}). Prima cursă, ruta, vehiculul și notițele echipei operaționale vin din fișierul de clienți Domestic 2016–2026.</p>
         <p class="note">Încărcările, descărcările, volumul pe ani și sezonalitatea vin din exportul TMS Domestic 2017–2026 (doar curse în România și Ungaria, primit la 16.10.2026). Clienții din istoric fără fișă sunt marcați „Istoric TMS”; transportatorii și casele de expediții sunt lăsați deoparte, în lista Excluse. Clientul efectiv al mărfii din cursele lor (firma de la care s-a încărcat) apare separat, marcat „Indirect · casă de expediții”.</p>
-        <p class="note">Textul fișelor nu se modifică din pagină. O greșeală găsită se notează în jurnal ca „Corecție la fișă”; Claude o verifică și o include în versiunea următoare. Etapele, notele, contactele și alocările rămân neatinse la actualizări.</p></div>
+        <p class="note">${D.feOff ? 'Textul fișelor nu se modifică din pagină. O greșeală găsită' : 'Textul fișelor nu se modifică din pagină, cu o excepție: recomandarea, pe care responsabilul o poate rescrie. O greșeală găsită în rest'} se notează în jurnal ca „Corecție la fișă”; Claude o verifică și o include în versiunea următoare. Etapele, notele, contactele, alocările${D.feOff ? '' : ' și textele scrise de echipă'} rămân neatinse la actualizări.</p></div>
     </section>`;
+}
+
+/* ---------- texte scrise de echipă peste fișa de cercetare (tabela fisa_edit; rămân la fiecare import) ---------- */
+const feOf = (r, camp) => (r && D.fe && D.fe[r.id] && D.fe[r.id][camp]) || null;
+const byWho = id => id && id === D.uid ? 'tine' : who(id);
+function htmlText(h) {   // HTML-ul de încredere din build → text simplu, cu rândurile păstrate (pentru câmpul de editare)
+  const s = String(h || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h[1-6])>/gi, '\n').replace(/<li[^>]*>/gi, '• ').replace(/<[^>]+>/g, '');
+  const t = document.createElement('textarea'); t.innerHTML = s;   // decodează &amp; &nbsp; etc. ca text, fără să creeze elemente
+  return t.value.split('\n').map(x => x.replace(/[ \t ]+/g, ' ').trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+const feNorm = h => strip(h).replace(/\s+/g, ' ').trim();
+// amprenta textului din cercetare: FNV-1a pe 32 de biți peste octeții UTF-8 ai textului fără tag-uri, cu spațiile normalizate (build/MIGRARI.md)
+function feHash(h) {
+  let x = 0x811c9dc5;
+  for (const b of new TextEncoder().encode(feNorm(h))) { x ^= b; x = Math.imul(x, 0x01000193) >>> 0; }
+  return 'fnv1a32:' + x.toString(16).padStart(8, '0');
+}
+const recTitle = r => r.fisa.pas_label === 'Pas' ? 'Pasul recomandat de cercetare' : (r.fisa.pas_label || 'Recomandare');
+const canRec = r => canEdit(r) && !D.feOff;
+// „Pas” = o sugestie, pe care echipa o poate rescrie; „Verdict” (decizii, gărzi de risc) rămâne mereu la vedere, iar textul echipei vine dedesubt
+const recIsPas = r => !r.fisa.pas || !r.fisa.pas_label || r.fisa.pas_label === 'Pas';
+const recStale = (r, fe) => !!fe && feHash(r.fisa.pas || '') !== fe.baza_hash;   // cercetarea s-a schimbat de la ultima editare
+function recAviz(can, unde) {
+  if (!can) return `<p class="rec-aviz soft">${ico('alert')}<span>Cercetarea s-a actualizat după ultima editare a echipei.</span></p>`;
+  if (unde) return `<p class="rec-aviz">${ico('alert')}<span>Cercetarea s-a actualizat după ultima editare. Verifică textul din cercetare, ${unde}. La salvare, textul echipei se notează ca verificat.</span></p>`;
+  return `<div class="rec-aviz">${ico('alert')}<span>Cercetarea s-a actualizat după ultima editare. Verifică textul din cercetare. Dacă textul echipei rămâne valabil, apasă „Am verificat”.</span><button type="button" class="btn sm" data-act="recok">${ico('check')}Am verificat</button></div>`;
+}
+function recomHTML(r) {
+  const fe = feOf(r, 'recomandare'), pas = r.fisa.pas || '', can = canRec(r), pasul = recIsPas(r), stale = recStale(r, fe);
+  const orig = open => `<details class="rec-orig"${open ? ' open' : ''}><summary>Recomandarea din cercetare</summary><div class="recom fisa">${pas || '<span class="faint">Fișa de cercetare actuală nu mai are o recomandare.</span>'}</div></details>`;
+  if (S.editRec === r.id && can) {
+    return `<div class="card" id="p-recom" data-editing="1"><header><h3 tabindex="-1">${ico('edit')}${pasul ? 'Recomandarea echipei' : esc(recTitle(r))}</h3></header>
+      ${pasul ? '' : `<div class="recom fisa">${pas}</div>`}
+      <form class="recform${pasul ? '' : ' rec-sub'}" id="recform" data-id="${esc(r.id)}">
+        ${stale ? recAviz(true, pasul ? 'mai jos' : 'de deasupra') : ''}${pasul ? '' : '<label class="rec-lbl" for="rec-text">Recomandarea echipei</label>'}
+        <textarea class="inp" id="rec-text" maxlength="4000" aria-label="Recomandarea echipei" placeholder="Ce recomandă echipa pentru acest client? Ex.: ofertăm spot pe Vâlcea → Arad, la prețul minim pe culoar.">${esc(fe ? fe.text : pasul ? htmlText(pas) : '')}</textarea>
+        <div class="rec-conf" id="rec-conf" role="alert"></div>
+        <div class="acts"><button class="btn pri sm">${ico('check')}Salvează</button><button type="button" class="btn sm" data-act="reccancel">Renunță</button>${fe ? `<button type="button" class="link danger" data-act="recrevert">${pasul ? 'Revino la textul din cercetare' : 'Șterge textul echipei'}</button>` : ''}<span class="err" id="rec-err" role="alert"></span></div>
+        <p class="note" style="margin:0">Textul echipei rămâne salvat și după actualizările CRM-ului. ${pasul ? `Recomandarea din cercetare se păstrează separat${pas ? ', dedesubt' : ''}.` : 'Textul din cercetare rămâne la vedere, deasupra.'}</p>
+      </form>${pasul && pas ? orig(stale) : ''}</div>`;
+  }
+  const btn = can ? `<button class="btn sm" data-act="recedit">${ico(fe || (pas && pasul) ? 'edit' : 'plus')}${fe || (pas && pasul) ? 'Editează' : pas ? 'Adaugă recomandarea echipei' : 'Adaugă o recomandare'}</button>` : '';
+  const meta = fe ? `<p class="rec-meta">actualizată de ${esc(byWho(fe.by))} · ${fmtDate(fe.upd)}</p>` : '';
+  if (!pasul) {   // verdictul din cercetare rămâne la vedere; textul echipei, dacă există, vine dedesubt
+    return `<div class="card" id="p-recom" data-stale="${stale ? 1 : 0}"><header><h3 tabindex="-1">${ico('arrow')}${esc(recTitle(r))}</h3>${btn}</header>
+      <div class="recom fisa">${pas}</div>${stale ? recAviz(can) : ''}
+      ${fe ? `<div class="rec-sub"><b class="rec-lbl">Recomandarea echipei</b><div class="recom rec-team">${esc(fe.text)}</div>${meta}</div>` : ''}</div>`;
+  }
+  if (fe) {
+    return `<div class="card" id="p-recom" data-stale="${stale ? 1 : 0}"><header><h3 tabindex="-1">${ico('arrow')}Recomandarea echipei</h3>${btn}</header>
+      <div class="recom rec-team">${esc(fe.text)}</div>${meta}
+      ${stale ? recAviz(can) : ''}
+      ${pas || stale ? orig(stale) : ''}</div>`;
+  }
+  if (pas) return `<div class="card" id="p-recom"><header><h3 tabindex="-1">${ico('arrow')}${esc(recTitle(r))}</h3>${btn}</header><div class="recom fisa">${pas}</div></div>`;
+  if (can) return `<div class="card" id="p-recom"><header><h3 tabindex="-1">${ico('arrow')}Recomandarea echipei</h3>${btn}</header><p class="muted" style="margin:0;font-size:14px">Fișa nu are o recomandare din cercetare. Poți scrie aici ce propune echipa.</p></div>`;
+  return '<div id="p-recom" hidden></div>';
+}
+// conflict la salvare: altcineva a scris între timp; arătăm textul de acum, iar textul utilizatorului rămâne în câmp
+function recConflict(cur) {
+  const el = $('#rec-conf'); if (!el) return;
+  el.innerHTML = cur
+    ? `<span>Între timp, textul echipei a fost modificat de ${esc(byWho(cur.by))} (${fmtDate(cur.upd)}). Textul de acum e mai jos; al tău a rămas în câmp. Apasă din nou „Salvează” ca să-l înlocuiești cu al tău.</span><div class="recom rec-team">${esc(cur.text)}</div>`
+    : '<span>Între timp, textul echipei a fost scos (fișa a revenit la textul din cercetare). Al tău a rămas în câmp. Apasă din nou „Salvează” ca să-l păstrezi.</span>';
+}
+function obsConflict(cur) {
+  const el = $('#oe-conf'); if (!el) return;
+  el.innerHTML = `<span>Între timp, nota a fost modificată${cur.editat_de ? ' de ' + esc(byWho(cur.editat_de)) : ''}${cur.editat_la ? ' (' + fmtDate(cur.editat_la) + ')' : ''}. Textul de acum e mai jos; al tău a rămas în câmp. Apasă din nou „Salvează” ca să-l înlocuiești cu al tău.</span><div class="recom rec-team">${esc(cur.text)}</div>`;
+}
+function recRefresh(r, focus) {
+  const el = $('#p-recom'); if (!el || !r) return;
+  const html = recomHTML(r); el.outerHTML = html;
+  const n = $('#p-recom'); if (n && !n.dataset.editing) n._html = html;
+  const ta = focus && $('#rec-text'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+// la actualizările din fundal: cardul se rescrie doar dacă s-a schimbat, cu secțiunea din cercetare deschisă sau închisă ca înainte
+function recSwap(rc, html) {
+  if (rc._html === html) return;
+  const d0 = rc.querySelector('.rec-orig'), st0 = rc.dataset.stale, a = document.activeElement;
+  const foc = a && rc.contains(a) ? (a.dataset && a.dataset.act ? `[data-act="${a.dataset.act}"]` : a.tagName === 'SUMMARY' ? 'summary' : null) : null;
+  rc.outerHTML = html;
+  const n = $('#p-recom'); if (!n) return; n._html = html;
+  const d1 = n.querySelector('.rec-orig'); if (d0 && d1 && n.dataset.stale === st0) d1.open = d0.open;
+  if (foc) { const el = n.querySelector(foc); if (el) el.focus({ preventScroll: true }); }
+}
+function jRefresh(r, focus) {
+  const jl = $('#p-jlist'); if (!jl || !r) return;
+  jl.innerHTML = jurnalItems(r, S.ptab === 'rezumat' ? 3 : 999);
+  const ta = focus && $('#oe-text'); if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+// la actualizările din fundal: lista se reface, dar nota aflată în editare rămâne neatinsă (text, cursor, focus)
+function jSwap(jl, r) {
+  const lim = S.ptab === 'rezumat' ? 3 : 999, form = jl.querySelector('#oeform');
+  if (!form) { jl.innerHTML = jurnalItems(r, lim); return; }
+  const li = form.closest('li'), tmp = document.createElement('ul');
+  tmp.innerHTML = jurnalItems(r, lim);
+  const slot = tmp.querySelector('#oeform'), slotLi = slot && slot.closest('li');
+  for (const n of [...jl.childNodes]) if (n !== li) n.remove();
+  let after = false;
+  for (const n of [...tmp.childNodes]) { if (n === slotLi) { after = true; continue; } if (after) jl.appendChild(n); else jl.insertBefore(n, li); }
+  if (!slotLi && !D.obs.some(o => o.id === form.dataset.obs)) { const err = li.querySelector('#oe-err'); if (err) err.textContent = 'Nota a fost ștearsă între timp. Textul tău e încă în câmp: copiază-l într-o notă nouă.'; }
+}
+// după salvare sau renunțare, focusul revine pe butonul care a deschis editarea (altfel pe titlul cardului)
+function focusBack(sel, fb) {
+  const el = (sel && $(sel)) || (fb && $(fb)); if (!el) return;
+  if (!el.matches('button, a, input, textarea, select, summary') && !el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+  el.focus({ preventScroll: true });
+}
+const obsBtn = id => id ? `[data-editobs="${CSS.escape(id)}"]` : null;
+// modificări nesalvate într-o notă sau în recomandare; fără confirm(): prima apăsare avertizează, a doua (în 6 secunde) renunță
+function editDirty(which) {
+  const f = (!which || which === 'obs') && $('#oeform'), ta = f && $('#oe-text'), rt = (!which || which === 'rec') && $('#rec-text');
+  if (ta && (ta.value !== ta.defaultValue || (f.querySelector('.tip[aria-pressed="true"]') || { dataset: {} }).dataset.tip !== f.dataset.tip0)) return true;
+  return !!(rt && rt.value !== rt.defaultValue);
+}
+let leaveArm = null;   // { k: acțiunea avertizată, t: când }: doar aceeași acțiune, repetată în 6 secunde, renunță la modificări
+function leaveOK(which, key) {
+  const k = (which || '*') + ':' + (key || '');
+  if (!editDirty(which) || (leaveArm && leaveArm.k === k && Date.now() - leaveArm.t < 6000)) { leaveArm = null; return true; }
+  leaveArm = { k, t: Date.now() }; toast('Ai modificări nesalvate. Apasă din nou ca să renunți la ele.'); return false;
 }
 
 /* ---------- Profilul clientului ---------- */
 function openProfile(id, tab) {
   const r = BYID.get(id); if (!r) return;
   closePop(); hideSugg();
-  S.open = id; S.ptab = tab || 'rezumat';
+  S.open = id; S.ptab = tab || 'rezumat'; S.editObs = null; S.editRec = null; S.editObsBase = undefined; S.editRecBase = undefined; leaveArm = null;
   $('#dr-root').innerHTML = `<div class="scrim" data-act="close"></div><aside class="drawer" role="dialog" aria-modal="true" aria-labelledby="p-title">${profileHTML(r)}</aside>`;
   document.querySelector('.drawer').scrollTop = 0;
   try { history.replaceState(null, '', '#c-' + id); } catch (e) { /* */ }
@@ -1855,7 +2287,8 @@ function refreshProfile() {
   const rs = $('#p-respw'); if (rs && document.activeElement !== $('#p-resp')) rs.outerHTML = respHTML(r);
   const tb = $('#p-tabs'); if (tb) tb.outerHTML = tabsHTML(r);
   const nf = $('#p-next'); if (nf && !nf.dataset.dirty) nf.outerHTML = nextHTML(r);
-  const jl = $('#p-jlist'); if (jl) jl.innerHTML = jurnalItems(r, S.ptab === 'rezumat' ? 3 : 999);
+  const jl = $('#p-jlist'); if (jl) jSwap(jl, r);   // o notă în editare rămâne cum e
+  const rc = $('#p-recom'); if (rc && !rc.dataset.editing) recSwap(rc, recomHTML(r));
   const cl = $('#p-cteam'); if (cl) cl.innerHTML = contTeam(r);
   const up = $('#p-upd'); if (up) up.innerHTML = updLine(r);
 }
@@ -1897,8 +2330,22 @@ function jurnalItems(r, lim) {
   const l = D.obsBy[r.id] || [];
   if (!D.db) return '<li class="empty-li">Jurnalul apare când pagina e deschisă pe claude.ai.</li>';
   if (!l.length) return `<li class="empty-li">Nicio notă încă.${canEdit(r) ? ' Scrie mai sus ce s-a întâmplat la primul contact.' : ''}</li>`;
-  return l.slice(0, lim).map(o => `<li class="${esc(o.tip)}"><span class="ic">${ico(TIP_IC[o.tip] || 'note')}</span><div><div class="h"><b>${esc(TIP_N[o.tip] || o.tip)}</b><span>${esc(who(o.autor))} · ${fmtDate(o.data)}</span>
-    ${canEdit(r) && (o.autor === D.uid || D.isOwner) ? `<button class="link" data-delobs="${esc(o.id)}">șterge</button>` : ''}</div><p>${esc(o.text)}</p></div></li>`).join('');
+  let list = l.slice(0, lim);
+  if (S.editObs && !list.some(o => o.id === S.editObs)) { const x = l.find(o => o.id === S.editObs); if (x) list = list.concat(x); }   // nota în editare rămâne vizibilă
+  return list.map(o => {
+    const can = canEdit(r) && (o.autor === D.uid || D.isOwner), ed = can && !D.feOff;   // editarea cere migrarea SQL din 17.10.2026
+    if (ed && S.editObs === o.id) return obsEditHTML(r, o);
+    const edited = o.editat_la ? `<span class="ed">editată ${fmtDate(o.editat_la)}${o.editat_de && o.editat_de !== o.autor ? ' de ' + esc(byWho(o.editat_de)) : ''}</span>` : '';
+    return `<li class="${esc(o.tip)}"><span class="ic">${ico(TIP_IC[o.tip] || 'note')}</span><div><div class="h"><b>${esc(TIP_N[o.tip] || o.tip)}</b><span>${esc(who(o.autor))} · ${fmtDate(o.data)}</span>${edited}
+    ${ed ? `<button class="link" data-editobs="${esc(o.id)}">editează</button>` : ''}${can ? `<button class="link" data-delobs="${esc(o.id)}">șterge</button>` : ''}</div><p>${esc(o.text)}</p></div></li>`;
+  }).join('');
+}
+function obsEditHTML(r, o) {   // editarea pe loc: tipul și textul; autorul și data rămân ale notei inițiale
+  return `<li class="${esc(o.tip)}"><span class="ic">${ico('edit')}</span><div><form class="composer obs-edit" id="oeform" data-obs="${esc(o.id)}" data-id="${esc(r.id)}" data-tip0="${esc(o.tip)}">
+    <div class="tiprow" role="group" aria-label="Tipul notei">${TIPURI.map(([k, n]) => `<button type="button" class="tip" data-tip="${k}" aria-pressed="${k === o.tip}">${n}</button>`).join('')}</div>
+    <textarea class="inp" id="oe-text" maxlength="4000" aria-label="Textul notei">${esc(o.text)}</textarea>
+    <div class="rec-conf" id="oe-conf" role="alert"></div>
+    <div class="acts"><button class="btn pri sm">${ico('check')}Salvează</button><button type="button" class="btn sm" data-act="obscancel">Renunță</button><span class="err" id="oe-err" role="alert"></span></div></form></div></li>`;
 }
 function composerHTML(r) {
   if (!canEdit(r)) return D.db && D.canWrite ? `<p class="note" style="margin:0 0 12px">${NOEDIT}</p>` : '';
@@ -1929,7 +2376,7 @@ function tabBody(r) {
     <details><summary>Date de identificare și financiare</summary><div class="body muted" style="font-size:14px">${r.fisa.meta}</div></details></div>`;
   // rezumat
   return `${nextHTML(r)}
-    ${['tms', 'indirect'].includes(r.sursa) ? tmsSumHTML(r) : ''}${benefCardHTML(r)}${indCardHTML(r)}${r.fisa.pas ? `<div class="card"><header><h3>${ico('arrow')}${esc(r.fisa.pas_label === 'Pas' ? 'Pasul recomandat de cercetare' : (r.fisa.pas_label || 'Recomandare'))}</h3></header><div class="recom fisa">${r.fisa.pas}</div></div>` : ''}
+    ${['tms', 'indirect'].includes(r.sursa) ? tmsSumHTML(r) : ''}${benefCardHTML(r)}${indCardHTML(r)}${recomHTML(r)}
     <div class="card"><header><h3>${ico('note')}Ultimele note</h3>${(D.obsBy[r.id] || []).length > 3 ? '<button class="link" data-ptab="jurnal">Tot jurnalul</button>' : ''}</header>
       ${canEdit(r) ? `<button class="btn sm" data-ptab="jurnal" style="margin-bottom:12px">${ico('plus')}Adaugă o notă</button>` : ''}<ul class="timeline" id="p-jlist">${jurnalItems(r, 3)}</ul></div>`;
 }
@@ -2003,10 +2450,10 @@ function moveSugg(d) {
 async function exportCSV() {
   if (!D.dl || !D.isOwner) return;  // exportul e doar pentru proprietarul paginii (Matei)
   const rows = sorted(filtered());
-  const H = ['Nr', 'Lista', 'Status', 'Client', 'Denumire completă', 'CUI', 'Responsabil', 'Etapă', 'Următorul pas', 'Termen', 'Ultima activitate', 'Județe', 'Regiuni', 'Oltenia', 'Flux HU',
+  const H = ['Nr', 'Lista', 'Status', 'Client', 'Denumire completă', 'CUI', 'Responsabil', 'Etapă', 'Următorul pas', 'Termen', 'Ultima activitate', 'Recomandarea echipei', 'Județe', 'Regiuni', 'Oltenia', 'Flux HU',
     'Regim temperatură', 'Tip marfă', 'Curse/an min', 'Curse/an max', 'Potențial', 'Risc', 'Red flag', 'Clasă', 'CA 2025 (RON)', 'Prima cursă', 'Vehicul', 'Ruta din fișier', 'Notițe echipa operațională', 'E-mail public', 'Telefon public', 'Curse TMS 2017–2026', 'Curse indirecte (prin case de expediții)', 'Prin (case de expediții)', 'Ultima cursă TMS', 'Traseul ultimei curse', 'Curse în ultimele 12 luni', 'Relație TMS', 'Încarcă în (TMS)', 'Descarcă în județele (TMS)'];
-  const cell = v => { const s = String(v ?? ''); return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-  const lines = [H.join(';')].concat(rows.map(r => { const p = P(r); return [r.nr, ({ ioan: 'Ioan', val2: 'Val 2', val3: 'Val 3', tms: 'Istoric TMS', indirect: 'Indirect' }[r.sursa] || 'Domestic'), STATUS_N[r.status], r.nume, r.titlu, r.cui, teamName(respOf(r)), ETAPA_N[etapaOf(r)], p.pas, fmtDate(p.termen), fmtDate(D.last[r.id]),
+  const cell = v => { let s = String(v ?? ''); if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s; return /[;"\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };   // „=…”, „+…”, „-…”, „@…” nu devin formule în Excel
+  const lines = [H.join(';')].concat(rows.map(r => { const p = P(r); return [r.nr, ({ ioan: 'Ioan', val2: 'Val 2', val3: 'Val 3', tms: 'Istoric TMS', indirect: 'Indirect' }[r.sursa] || 'Domestic'), STATUS_N[r.status], r.nume, r.titlu, r.cui, teamName(respOf(r)), ETAPA_N[etapaOf(r)], p.pas, fmtDate(p.termen), fmtDate(D.last[r.id]), (feOf(r, 'recomandare') || {}).text || '',
     r.judete.join(', '), r.regiuni.join(', '), r.oltenia ? 'da' : '', r.hu ? 'da' : '', (r.temp || []).join(', '), r.sector, r.vol_min, r.vol_max, r.pot_max ? r.pot_min + '–' + r.pot_max : '', RISC_N[r.risc], r.red_flag, r.clasa,
     r.ca2025 == null ? '' : Math.round(r.ca2025), fmtDate(r.prima_cursa), (r.vehicul_istoric || []).join(', '), r.ruta_istorica, r.nota_fisier, (r.emails || []).join(', '), (r.telefoane || []).join(', '),
     r.tms && !r.tms.indirect ? r.tms.total : '', r.ind ? r.ind.total : '', r.ind ? (r.ind.prin || []).slice(0, 5).map(x => (BYID.get(x[0]) || {}).nume || '').filter(Boolean).join(', ') : '', r.tms ? fmtDate(r.tms.ultima) : (doar2016(r) ? '2016' : ''), r.tms ? ultTraseu(r.tms.ult) : '', r.tms ? (r.tms.n12 || 0) : '', (REL_OPTS.find(x => x[0] === relOf(r)) || [])[1] || '', r.tms ? (r.tms.inc || []).slice(0, 5).map(x => locLabel(x[0])).join(', ') : '',
@@ -2082,14 +2529,14 @@ document.addEventListener('click', async e => {
   if (d.rdir) { S.rdir = d.rdir; render(); return; }
   if (d.rz) { const [side, ...z] = d.rz.split(':'); const v = z.join(':'); if (side === 'a') { S.ra = v; S.rb = null; } else if (S.ra && zJ(S.ra) === zK(v)) S.rb = null; else S.rb = v; S.showAll = {}; render(); window.scrollTo(0, 0); return; }
   if (d.rlane) { const [x, y] = d.rlane.split('>'); if (S.ra && zJ(S.ra) === x && x !== y) S.rb = 'j:' + y; else if (S.ra && zJ(S.ra) === y && x !== y) S.rb = 'j:' + x; else { S.ra = 'j:' + x; S.rb = 'j:' + y; } S.showAll = {}; render(); window.scrollTo(0, 0); return; }
-  if (d.rgo) { const [a, b] = d.rgo.split('>'); S.ra = a; S.rb = b || null; S.showAll = {}; closeProfile(); go('rute'); return; }
+  if (d.rgo) { if (S.open && !leaveOK(null, 'rgo')) return; const [a, b] = d.rgo.split('>'); S.ra = a; S.rb = b || null; S.showAll = {}; closeProfile(); go('rute'); return; }
   if (d.rlist) { rlistGo(d.rlist); return; }
   if (d.barf) { resetFilters(); S.f[d.barf] = new Set([d.v]); if (d.barf === 'resp' && d.v === '_none') { S.f.resp = new Set(['_none']); } go('clienti'); return; }
   if (d.matrix) { const [rk, vk] = d.matrix.split('|'); resetFilters(); S.f.risc = new Set([rk]); S.f.vol = new Set([vk]); S.seg = 'toti'; go('clienti'); return; }
   if (d.jud && !d.open) { const s = S.f[d.fk || 'judet']; if (s.has(d.jud)) s.delete(d.jud); else s.add(d.jud); render(); return; }
   if (d.showall) { S.showAll[d.showall] = true; render(); return; }
   if (d.copy) { try { await navigator.clipboard.writeText(d.copy); toast('Copiat: ' + d.copy); } catch (x) { toast('Selectează textul și copiază-l manual.'); } return; }
-  if (d.ptab && S.open) { S.ptab = d.ptab; const r = BYID.get(S.open); $('#p-tabs').outerHTML = tabsHTML(r); $('#p-main').innerHTML = tabBody(r); if (d.ptab === 'jurnal') { const ta = $('#j-text'); if (ta) ta.focus(); } return; }
+  if (d.ptab && S.open) { if (!leaveOK(null, 'ptab')) return; S.ptab = d.ptab; S.editObs = null; S.editRec = null; S.editObsBase = undefined; S.editRecBase = undefined; const r = BYID.get(S.open); $('#p-tabs').outerHTML = tabsHTML(r); $('#p-main').innerHTML = tabBody(r); if (d.ptab === 'jurnal') { const ta = $('#j-text'); if (ta) ta.focus(); } return; }
   if (d.tip) { t.parentElement.querySelectorAll('.tip').forEach(b => b.setAttribute('aria-pressed', String(b === t))); return; }
   if (d.step && S.open) {
     const k = d.step;
@@ -2100,8 +2547,14 @@ document.addEventListener('click', async e => {
     changeStage(S.open, k); return;
   }
   if ((d.delobs || d.delcont) && !canEdit(BYID.get(((d.delobs ? D.obs : D.cont).find(x => x.id === (d.delobs || d.delcont)) || {}).cid))) { toast(NOEDIT); return; }
-  if (d.delobs) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } await write(() => D.db.doc('observatii/' + d.delobs).delete()); return; }
-  if (d.delcont) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } await write(() => D.db.doc('contacte/' + d.delcont).delete()); return; }
+  if (d.delobs) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } if (await write(() => D.db.doc('observatii/' + d.delobs).delete())) toast('Nota a fost ștearsă.'); return; }
+  if (d.editobs) {
+    const o = D.obs.find(x => x.id === d.editobs), r = o && BYID.get(o.cid);
+    if (!o || !r || D.feOff || !(canEdit(r) && (o.autor === D.uid || D.isOwner))) { toast(NOEDIT); return; }
+    if (S.editObs && S.editObs !== o.id && !leaveOK('obs', 'editobs')) return;
+    S.editObs = o.id; S.editObsBase = o.editat_la || null; jRefresh(r, true); return;
+  }
+  if (d.delcont) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi ștergerea?'; return; } if (await write(() => D.db.doc('contacte/' + d.delcont).delete())) toast('Contactul a fost șters.'); return; }
   if (d.rm) { if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi?'; return; } const membri = team().filter(x => x.k !== d.rm); await write(() => D.db.doc('config/echipa').set({ membri })); return; }
   switch (d.act) {
     case 'reset': resetFilters(); S.q = ''; qEl.value = ''; S.sel.clear(); render(); return;
@@ -2111,12 +2564,33 @@ document.addEventListener('click', async e => {
     case 'rclr': S.ra = null; S.rb = null; S.rper = 'tot'; S.rmap = 'inc'; S.rdir = 'din'; S.rinc = new Set(['tinta', 'istoric', 'curent']); S.showAll = {}; render(); return;
     case 'popclose': closePop(); return;
     case 'more': S.limit += 120; render(); return;
-    case 'close': closeProfile(); return;
+    case 'close': if (leaveOK(null, 'close')) closeProfile(); return;
     case 'export': exportCSV(); return;
     case 'selnone': S.sel.clear(); render(); return;
     case 'allres': hideSugg(); S.seg = 'toti'; if (C.filter(r => passQ(r, qTokens())).some(r => r.status !== 'tinta')) resetFilters(); go('clienti'); return;
     case 'undo': if (S.undo) { const u = S.undo; S.undo = null; $('#toast-root').innerHTML = ''; await u(); } return;
     case 'motivcancel': $('#p-motiv').innerHTML = ''; return;
+    case 'obscancel': { const id = S.editObs; S.editObs = null; S.editObsBase = undefined; jRefresh(BYID.get(S.open)); focusBack(obsBtn(id), '#p-jlist'); return; }
+    case 'recedit': { const r = BYID.get(S.open); if (!r || !canRec(r)) { toast(NOEDIT); return; } const fe = feOf(r, 'recomandare'); S.editRec = r.id; S.editRecBase = fe ? fe.upd || null : null; recRefresh(r, true); return; }
+    case 'reccancel': S.editRec = null; S.editRecBase = undefined; recRefresh(BYID.get(S.open)); focusBack('#p-recom [data-act=recedit]', '#p-recom h3'); return;
+    case 'recok': {   // „Am verificat”: textul echipei rămâne; se notează amprenta cercetării de acum
+      const r = BYID.get(S.open), fe = r && feOf(r, 'recomandare'); if (!r || !canRec(r) || !fe) { toast(NOEDIT); return; }
+      t.disabled = true;
+      const hash = feHash(r.fisa.pas || ''); let res;
+      const ok = await write(async () => { res = await D.db.doc('fisa_edit/' + r.id + '|recomandare').set({ text: fe.text, baza_hash: hash, upd_baza: fe.upd || null }); });
+      if (!ok) { t.disabled = false; return; }
+      D.fe[r.id] = Object.assign({}, D.fe[r.id], { recomandare: Object.assign({}, fe, { baza_hash: hash, upd: (res && res.upd) || new Date().toISOString(), by: D.uid || null }) });
+      indexWork(); recRefresh(r); focusBack('#p-recom [data-act=recedit]', '#p-recom h3'); toast('Am notat că textul echipei e verificat pe cercetarea nouă.'); return;
+    }
+    case 'recrevert': {   // șterge textul echipei (baza de date îl arhivează); fișa arată din nou recomandarea din cercetare
+      const r = BYID.get(S.open); if (!r || !canRec(r) || !feOf(r, 'recomandare')) { toast(NOEDIT); return; }
+      if (t.dataset.confirm !== '1') { t.dataset.confirm = '1'; t.textContent = 'confirmi? textul echipei trece în istoric'; return; }
+      t.disabled = true;
+      const ok = await write(() => D.db.doc('fisa_edit/' + r.id + '|recomandare').delete());
+      if (!ok) { t.disabled = false; return; }
+      if (D.fe[r.id]) delete D.fe[r.id].recomandare;
+      S.editRec = null; S.editRecBase = undefined; indexWork(); recRefresh(r); focusBack('#p-recom [data-act=recedit]', '#p-recom h3'); toast(recIsPas(r) ? 'Fișa arată din nou recomandarea din cercetare.' : 'Textul echipei a fost scos.'); return;
+    }
     case 'bulk': {
       const resp = D.canAdmin && $('#bulk-resp') ? $('#bulk-resp').value : '', et = $('#bulk-etapa').value;
       if (!resp && !et) { toast(D.canAdmin ? 'Alege un responsabil sau o etapă.' : 'Alege o etapă.'); return; }
@@ -2126,10 +2600,17 @@ document.addEventListener('click', async e => {
     }
   }
   const open = t.closest('[data-open]');
-  if (open) openProfile(open.dataset.open);
+  if (open) { if (S.open && !leaveOK(null, 'open')) return; openProfile(open.dataset.open); }
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') { if (S.pop) { closePop(); return; } if (S.open) { closeProfile(); return; } }
+  if (e.key === 'Escape' && e.target.closest && e.target.closest('#oeform, #p-recom[data-editing]')) {   // Esc renunță la editare, nu închide fișa
+    const r = BYID.get(S.open), obs = !!e.target.closest('#oeform');
+    if (!leaveOK(obs ? 'obs' : 'rec', 'esc')) return;
+    if (obs) { const id = S.editObs; S.editObs = null; S.editObsBase = undefined; jRefresh(r); focusBack(obsBtn(id), '#p-jlist'); }
+    else { S.editRec = null; S.editRecBase = undefined; recRefresh(r); focusBack('#p-recom [data-act=recedit]', '#p-recom h3'); }
+    return;
+  }
+  if (e.key === 'Escape') { if (S.pop) { closePop(); return; } if (S.open) { if (leaveOK(null, 'escclose')) closeProfile(); return; } }
   if (e.key === '/' && !e.target.closest('input, textarea, select')) { e.preventDefault(); qEl.focus(); return; }
   if (e.key === 'Enter' && e.target.matches && e.target.matches('.lrow[data-open]')) openProfile(e.target.dataset.open);
 });
@@ -2152,7 +2633,57 @@ document.addEventListener('submit', async e => {
     st.textContent = ok ? 'Salvat.' : 'Nesalvat.'; if (ok) schedule(true); return;
   }
   if (f.id === 'motivform') { const k = f.dataset.k; await changeStage(S.open, k, $('#m-text').value.trim()); return; }
-  if ((f.id === 'jform' || f.id === 'cform') && !canEdit(BYID.get(f.dataset.id))) { toast(NOEDIT); return; }
+  if (f.id === 'oeform') {   // nota editată: tipul și textul; versiunea veche o păstrează baza de date
+    const o = D.obs.find(x => x.id === f.dataset.obs), r = o && BYID.get(o.cid), err = $('#oe-err');
+    if (!o) { err.textContent = 'Nota a fost ștearsă între timp. Textul tău e încă în câmp: copiază-l într-o notă nouă.'; return; }
+    if (!r || D.feOff || !(canEdit(r) && (o.autor === D.uid || D.isOwner))) { toast(NOEDIT); return; }
+    const text = $('#oe-text').value.trim(), tip = (f.querySelector('.tip[aria-pressed="true"]') || {}).dataset?.tip || o.tip;
+    if (!text) { err.textContent = 'Nota nu poate rămâne goală. Ca s-o scoți, folosește „șterge”.'; $('#oe-text').focus(); return; }
+    if (tip === o.tip && text === o.text) { S.editObs = null; S.editObsBase = undefined; jRefresh(r); focusBack(obsBtn(o.id), '#p-jlist'); return; }
+    const base = S.editObsBase === undefined ? (o.editat_la || null) : S.editObsBase;
+    if ((o.editat_la || null) !== base) { obsConflict(o); S.editObsBase = o.editat_la || null; return; }   // altcineva a editat-o între timp
+    const btn = f.querySelector('button.pri'); btn.disabled = true; err.textContent = '';
+    let res;
+    const ok = await write(async () => { res = await D.db.doc('observatii/' + o.id).update({ tip, text, editat_baza: base }); });
+    if (!ok) {
+      btn.disabled = false;
+      if (write.last === 'gone') err.textContent = write.err.message;
+      else if (write.last === 'conflict' && write.err.row) {   // versiunea de acum, din baza de date, devine noua bază a editării
+        const x = write.err.row; Object.assign(o, { tip: x.tip, text: x.text, editat_la: x.editat_la || null, editat_de: x.editat_de || null }); obsConflict(x); S.editObsBase = x.editat_la || null;
+      }
+      return;
+    }
+    Object.assign(o, { tip, text, editat_la: (res && res.editat_la) || new Date().toISOString(), editat_de: D.uid || null });
+    S.editObs = null; S.editObsBase = undefined; indexWork(); jRefresh(r); focusBack(obsBtn(o.id), '#p-jlist'); toast('Nota a fost actualizată.'); return;
+  }
+  if (f.id === 'recform') {   // recomandarea echipei: rămâne la importuri; amprenta cercetării de acum arată când se schimbă cercetarea
+    const r = BYID.get(f.dataset.id), err = $('#rec-err');
+    if (!r || !canRec(r)) { toast(NOEDIT); return; }
+    const fe = feOf(r, 'recomandare'), pas = r.fisa.pas || '', text = $('#rec-text').value.replace(/\r\n?/g, '\n').trim();
+    if (!text) { err.textContent = fe ? `Textul e gol. Ca să-l scoți, apasă „${recIsPas(r) ? 'Revino la textul din cercetare' : 'Șterge textul echipei'}”.` : 'Scrie recomandarea înainte să salvezi.'; $('#rec-text').focus(); return; }
+    const hash = feHash(pas), flat = s => s.replace(/\s+/g, ' ').trim();
+    if (!fe && recIsPas(r) && flat(text) === flat(htmlText(pas))) { err.textContent = 'Textul e la fel ca cel din cercetare. Schimbă-l înainte să salvezi.'; return; }
+    if (fe && fe.text === text && fe.baza_hash === hash) { S.editRec = null; S.editRecBase = undefined; recRefresh(r); focusBack('#p-recom [data-act=recedit]', '#p-recom h3'); return; }
+    const cur = fe ? fe.upd || null : null, base = S.editRecBase === undefined ? cur : S.editRecBase;
+    if (cur !== base) { recConflict(fe); S.editRecBase = cur; return; }   // altcineva a scris între timp: întâi arătăm textul lui
+    const btn = f.querySelector('button.pri'); btn.disabled = true; err.textContent = '';
+    let res;
+    const ok = await write(async () => { res = await D.db.doc('fisa_edit/' + r.id + '|recomandare').set({ text, baza_hash: hash, upd_baza: base }); });
+    if (!ok) {
+      btn.disabled = false;
+      if (write.last === 'conflict') {   // versiunea de acum, din baza de date, devine noua bază a editării
+        const x = write.err.row;
+        if (x) D.fe[r.id] = Object.assign({}, D.fe[r.id], { recomandare: { text: x.text, baza_hash: x.baza_hash ?? null, upd: x.upd, by: x.by } }); else if (D.fe[r.id]) delete D.fe[r.id].recomandare;
+        indexWork(); recConflict(x); S.editRecBase = x ? x.upd || null : null;
+      }
+      return;
+    }
+    const confirmat = fe && fe.text === text;
+    D.fe[r.id] = Object.assign({}, D.fe[r.id], { recomandare: { text, baza_hash: hash, upd: (res && res.upd) || new Date().toISOString(), by: D.uid || null } });
+    S.editRec = null; S.editRecBase = undefined; indexWork(); recRefresh(r); focusBack('#p-recom [data-act=recedit]', '#p-recom h3');
+    toast(confirmat ? 'Am notat că textul echipei e verificat pe cercetarea nouă.' : 'Recomandarea echipei a fost salvată.'); return;
+  }
+  if ((f.id === 'jform' || f.id === 'cform') && !canEdit(BYID.get(f.dataset.id))) { noEdit(f.dataset.id); return; }
   if (f.id === 'jform') {
     const text = $('#j-text').value.trim(), err = $('#j-err');
     if (!text) { err.textContent = 'Scrie ce s-a întâmplat înainte să adaugi nota.'; $('#j-text').focus(); return; }
